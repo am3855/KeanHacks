@@ -1,15 +1,30 @@
 import { NextResponse } from "next/server";
 import { getResidentHistory } from "@/lib/db/events";
 
+const EMPTY_HISTORY = {
+  totalEventsToday: 0,
+  urgentEvents: 0,
+  assistEvents: 0,
+  watchEvents: 0,
+  mostCommonEventType: null,
+  lastEventAt: null,
+  recentEvents: [],
+};
+
 export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const history = await getResidentHistory(params.id);
-    return NextResponse.json(history);
+    // Ensure recentEvents is always an array even if DB returns unexpected shape
+    return NextResponse.json({
+      ...EMPTY_HISTORY,
+      ...history,
+      recentEvents: history.recentEvents ?? [],
+    });
   } catch (err) {
     console.error("GET /api/residents/[id]/history error:", err);
-    return NextResponse.json({ error: "Failed to fetch resident history" }, { status: 500 });
+    return NextResponse.json({ ...EMPTY_HISTORY, residentId: params.id });
   }
 }

@@ -18,7 +18,7 @@ interface AssistantRequest {
   classification: SafetyClassification;
 }
 
-const MOCK_RESPONSES: Record<string, string> = {
+const BASE_RESPONSES: Record<string, string> = {
   possible_fall:
     "A possible fall was detected. Approach calmly and check if the resident is conscious and responsive. Do not move them if they report pain or injury is suspected. Clear the area of hazards and call for help if needed. Follow your facility's emergency protocol and notify medical staff promptly.",
   fall_risk:
@@ -34,6 +34,75 @@ const MOCK_RESPONSES: Record<string, string> = {
   normal:
     "No concerns are currently detected. Continue your routine monitoring. Use this time to review the event log and follow up on any previously acknowledged alerts.",
 };
+
+const EMERGENCY_RESPONSES: Record<string, string> = {
+  possible_fall:
+    "Yes, treat this as a potential emergency. If the resident is unresponsive or reports pain, do not move them and call emergency services immediately. Stay with them and keep them calm until help arrives.",
+  fall_risk:
+    "This is a high-priority alert. Reach the resident immediately, offer support, and prevent any further loss of balance. If the resident has fallen or complains of pain, follow your emergency protocol.",
+  immobility:
+    "Prolonged immobility can indicate a medical issue. If the resident is unresponsive or in distress, escalate immediately to medical staff — do not wait.",
+  wandering:
+    "Not typically an emergency, but locate the resident quickly. If they are near a hazardous area or seem confused, get additional staff to assist with a safe redirect.",
+  unsafe_posture:
+    "If the resident appears in pain, very unsteady, or unresponsive, treat this as urgent and request immediate clinical assessment.",
+  out_of_frame:
+    "Perform a manual check immediately. If the resident cannot be found within a few minutes, treat it as an emergency and follow your missing-resident protocol.",
+  normal:
+    "No active alerts at this time. If you personally observe something concerning, always trust your judgment and escalate as needed.",
+};
+
+const DOCUMENT_RESPONSES: Record<string, string> = {
+  possible_fall:
+    "Document: exact time of alert, resident's position when found, level of responsiveness, any pain reported, actions taken, and staff involved. Notify the nurse and complete an incident report per facility policy.",
+  fall_risk:
+    "Log the time, the detected posture, your intervention (e.g., assisted to chair), and any resident complaint. Note it in the shift handover as well.",
+  immobility:
+    "Record how long the resident was still, their condition when checked, fluids or comfort offered, and any escalation. Update the care log for the next shift.",
+  wandering:
+    "Note the time, where the resident was found, their apparent orientation (confused/calm), how they were redirected, and any changes in behaviour worth flagging.",
+  unsafe_posture:
+    "Document the time, observed posture angle or lean, any complaints of dizziness or pain, and the corrective action taken. If a clinical check was requested, note the outcome.",
+  out_of_frame:
+    "Log the time the resident went off-camera, when and where they were located, and any context for why they left the monitored area.",
+  normal:
+    "No specific incident to document. Review the event log for any unacknowledged alerts from the past shift and add notes where appropriate.",
+};
+
+const HELP_RESPONSES: Record<string, string> = {
+  possible_fall:
+    "Move quickly but calmly to the resident. Kneel or crouch to their level, speak reassuringly, and assess for injury before attempting any movement. If injured, keep them still and call for help.",
+  fall_risk:
+    "Approach from the front so the resident sees you. Offer both hands or a stable surface to hold, and guide them back to a safe position slowly. Ask how they feel before and after moving.",
+  immobility:
+    "Knock and enter quietly. Call the resident by name, check for a response, and observe their breathing and colour. Offer fluids and ask if they need assistance changing position.",
+  wandering:
+    "Use a calm, familiar tone. Do not block or grab them — walk alongside and gently guide them back. Distraction (e.g., mentioning a meal or activity) can help with redirecting.",
+  unsafe_posture:
+    "Approach from the front, introduce yourself, and ask permission before adjusting their position. Use a gait belt if needed and ensure their back is supported before leaving.",
+  out_of_frame:
+    "Do a systematic check: bathroom, common areas, adjacent rooms. Bring a radio or phone so you can call for backup quickly if needed.",
+  normal:
+    "No intervention required right now. A friendly check-in is always welcome — knock, say hello, and confirm the resident is comfortable.",
+};
+
+function getMockGuidance(eventType: string, question: string): string {
+  const q = question.toLowerCase();
+
+  if (q.includes("emergency") || q.includes("urgent") || q.includes("serious") || q.includes("dangerous")) {
+    return EMERGENCY_RESPONSES[eventType] ?? BASE_RESPONSES[eventType] ?? "Follow your facility's emergency protocol and check on the resident immediately.";
+  }
+
+  if (q.includes("document") || q.includes("log") || q.includes("note") || q.includes("record") || q.includes("report")) {
+    return DOCUMENT_RESPONSES[eventType] ?? BASE_RESPONSES[eventType] ?? "Document the time, observations, and actions taken in the care log.";
+  }
+
+  if (q.includes("help") || q.includes("assist") || q.includes("how do i") || q.includes("how should") || q.includes("what do i")) {
+    return HELP_RESPONSES[eventType] ?? BASE_RESPONSES[eventType] ?? "Approach calmly and follow your facility's care protocol.";
+  }
+
+  return BASE_RESPONSES[eventType] ?? "Please follow your facility's standard care protocol and check on the resident directly.";
+}
 
 async function callClaudeAPI(
   question: string,
@@ -93,15 +162,10 @@ export async function POST(req: Request) {
         guidance = await callClaudeAPI(question, resident, classification);
       } catch (apiErr) {
         console.warn("Claude API call failed, using mock:", apiErr);
-        guidance =
-          MOCK_RESPONSES[classification.eventType] ??
-          "Please follow your facility's standard care protocol and check on the resident directly.";
+        guidance = getMockGuidance(classification.eventType, question);
       }
     } else {
-      // Mock response — realistic and grounded in the event type
-      guidance =
-        MOCK_RESPONSES[classification.eventType] ??
-        "Please follow your facility's standard care protocol and check on the resident directly.";
+      guidance = getMockGuidance(classification.eventType, question);
     }
 
     return NextResponse.json({

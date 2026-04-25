@@ -144,12 +144,18 @@ export function isInsideSafeZone(landmarks: PoseLandmark[], zone: SafeZone): boo
 }
 
 // ─── Check that at least the core landmarks are visible with good confidence ──
+// Uses `some` across nose + shoulders + hips so that partially-occluded poses
+// (e.g. hips out of frame) still register as visible when shoulders are clear.
 export function isPoseVisible(landmarks: PoseLandmark[]): boolean {
-  const required = [LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_HIP, LM.RIGHT_HIP];
-  return required.every((idx) => {
+  if (!landmarks || landmarks.length === 0) return false;
+  // Require at least 2 of these 5 key landmarks to have reasonable visibility
+  const keyIndices = [LM.NOSE, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_HIP, LM.RIGHT_HIP];
+  let count = 0;
+  for (const idx of keyIndices) {
     const lm = landmarks[idx];
-    return lm && (lm.visibility === undefined || lm.visibility > 0.4);
-  });
+    if (lm && (lm.visibility === undefined || lm.visibility > 0.3)) count++;
+  }
+  return count >= 2;
 }
 
 // ─── Default safe zone: 80% of the frame (10% margin on each side) ───────────

@@ -115,6 +115,16 @@ export function useResidentMonitor(
       visible,
     };
 
+    console.debug("[ElderWatch]", {
+      landmarksLength: landmarks?.length ?? 0,
+      visible,
+      isLyingDown,
+      movementScore: +movementScore.toFixed(3),
+      postureAngle: +postureAngle.toFixed(1),
+      secondsStill: +secondsStill.toFixed(1),
+      insideSafeZone,
+    });
+
     const classification = classifyResidentSafety(signals);
 
     // ── Persist meaningful events (debounced per event type) ────────────────

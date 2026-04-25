@@ -307,7 +307,7 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
   useEffect(() => {
     setLoading(true);
     fetch(`/api/residents/${residentId}/history`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => setHistory(d))
       .catch(() => setHistory(null))
       .finally(() => setLoading(false));
@@ -370,10 +370,10 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
 
       {/* Recent events list */}
       <div className="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar">
-        {history.recentEvents.length === 0 && (
+        {(history.recentEvents ?? []).length === 0 && (
           <p className="text-gray-600 text-xs text-center py-4">No events recorded</p>
         )}
-        {history.recentEvents.map((e) => (
+        {(history.recentEvents ?? []).map((e) => (
           <div
             key={e._id}
             className="flex items-start gap-2 text-xs text-gray-400 bg-gray-700/30 rounded-lg p-2"
