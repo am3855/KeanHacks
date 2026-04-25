@@ -4,7 +4,7 @@
 // For demonstration purposes only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { ResidentProfile, SafetyEvent, CaregiverNote } from "./types";
+import type { ResidentProfile, SafetyEvent, CaregiverNote, VideoClip } from "./types";
 
 export const MOCK_RESIDENTS: ResidentProfile[] = [
   {
@@ -228,6 +228,7 @@ export class InMemoryStore {
   private residents: ResidentProfile[] = [...MOCK_RESIDENTS];
   private events: SafetyEvent[] = generateMockEvents();
   private notes: CaregiverNote[] = [...MOCK_NOTES];
+  private videoClips: VideoClip[] = [...MOCK_VIDEO_CLIPS];
 
   getResidents() {
     return this.residents;
@@ -302,6 +303,21 @@ export class InMemoryStore {
     };
   }
 
+  getVideoClipsByResident(residentId: string): VideoClip[] {
+    return [...this.videoClips]
+      .filter((c) => c.residentId === residentId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  getVideoClipById(id: string): VideoClip | null {
+    return this.videoClips.find((c) => c._id === id) ?? null;
+  }
+
+  createVideoClip(clip: VideoClip): VideoClip {
+    this.videoClips.unshift(clip);
+    return clip;
+  }
+
   getResidentHistory(residentId: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -313,18 +329,57 @@ export class InMemoryStore {
       typeCounts[e.eventType] = (typeCounts[e.eventType] || 0) + 1;
     }
     const mostCommon = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0];
+    const clips = this.getVideoClipsByResident(residentId);
 
     return {
       totalEventsToday: todayEvents.length,
       urgentEvents: events.filter((e) => e.severity === "urgent").length,
       assistEvents: events.filter((e) => e.severity === "assist").length,
       watchEvents: events.filter((e) => e.severity === "watch").length,
+      totalVideoClips: clips.length,
+      latestVideoClipAt: clips[0]?.createdAt ?? null,
       mostCommonEventType: mostCommon ? mostCommon[0] : null,
       lastEventAt: events[0]?.createdAt ?? null,
       recentEvents: events.slice(0, 20),
+      videoClips: clips.slice(0, 10),
     };
   }
 }
+
+export const MOCK_VIDEO_CLIPS: VideoClip[] = [
+  {
+    _id: "clip_001",
+    eventId: "event_001",
+    residentId: "resident_001",
+    residentName: "Eleanor Brooks",
+    room: "Room 204",
+    severity: "urgent",
+    eventType: "possible_fall",
+    s3Key: "critical-events/resident_001/event_001_demo.webm",
+    bucket: "demo-bucket",
+    contentType: "video/webm",
+    durationSeconds: 18,
+    clipStartTime: new Date(Date.now() - 3.3 * 60 * 60 * 1000).toISOString(),
+    clipEndTime: new Date(Date.now() - 3.0 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    _id: "clip_002",
+    eventId: "event_003",
+    residentId: "resident_002",
+    residentName: "Robert Hayes",
+    room: "Room 118",
+    severity: "assist",
+    eventType: "immobility",
+    s3Key: "critical-events/resident_002/event_003_demo.webm",
+    bucket: "demo-bucket",
+    contentType: "video/webm",
+    durationSeconds: 15,
+    clipStartTime: new Date(Date.now() - 1.7 * 60 * 60 * 1000).toISOString(),
+    clipEndTime: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
+    createdAt: new Date(Date.now() - 1.5 * 60 * 60 * 1000).toISOString(),
+  },
+];
 
 // Singleton in-memory store — used when MongoDB is unavailable
 let _inMemoryStore: InMemoryStore | null = null;

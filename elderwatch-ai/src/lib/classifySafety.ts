@@ -103,6 +103,8 @@ export const RECOMMENDED_ACTIONS: Record<string, string> = {
     "Gently redirect the resident to their safe area. Note the time and location in the care log.",
   [EventType.UNSAFE_POSTURE]:
     "Assist the resident to a more comfortable and stable seated or standing position. Check for dizziness.",
+  [EventType.SEIZURE_LIKE_MOTION]:
+    "High-frequency movement pattern detected. Assess the resident immediately. If seizure-like activity is observed, follow your facility's seizure response protocol and call medical staff.",
   [EventType.OUT_OF_FRAME]:
     "Verify the resident's location manually. They may have moved out of camera view.",
   [EventType.NORMAL]: "No action required. Continue routine monitoring.",

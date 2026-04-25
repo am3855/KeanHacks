@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { MOCK_RESIDENTS } from "@/lib/mockData";
 import { DEFAULT_SAFE_ZONE } from "@/lib/poseHelpers";
 import { usePoseDetection } from "@/hooks/usePoseDetection";
 import { useResidentMonitor } from "@/hooks/useResidentMonitor";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useVideoRecorder } from "@/hooks/useVideoRecorder";
 import ResidentCard from "@/components/ResidentCard";
 import EventTimeline from "@/components/EventTimeline";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import AIAssistant from "@/components/AIAssistant";
-import type { ResidentProfile, SafetyEvent } from "@/lib/types";
+import type { ResidentProfile, SafetyEvent, VideoClip } from "@/lib/types";
 
 // PoseCamera uses canvas/webcam APIs — load client-only
 const PoseCamera = dynamic(() => import("@/components/PoseCamera"), { ssr: false });
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [residents] = useState<ResidentProfile[]>(MOCK_RESIDENTS);
   const [selectedResidentId, setSelectedResidentId] = useState<string>(MOCK_RESIDENTS[0].id);
   const [mongoConnected, setMongoConnected] = useState(false);
+  const [s3Configured, setS3Configured] = useState(false);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [isSeedLoading, setIsSeedLoading] = useState(false);
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export default function Dashboard() {
   const selectedResident = residents.find((r) => r.id === selectedResidentId) ?? residents[0];
 
   // ── Pose detection ────────────────────────────────────────────────────────
-  const { landmarks, videoRef, canvasRef, status: poseStatus, errorMessage } = usePoseDetection();
+  const { landmarks, videoRef, canvasRef, status: poseStatus, errorMessage, stream } = usePoseDetection();
 
   // ── Safety monitoring ─────────────────────────────────────────────────────
   const { signals, classification, timeline } = useResidentMonitor(
@@ -44,12 +46,24 @@ export default function Dashboard() {
   // ── TTS + visual alerts ───────────────────────────────────────────────────
   useAlerts(classification, selectedResident);
 
-  // ── Check MongoDB connection on mount ─────────────────────────────────────
+  // ── Critical event video recording ───────────────────────────────────────
+  const { recordingStatus, statusMessage: recordingMessage, triggerDemo } = useVideoRecorder(
+    stream,
+    classification,
+    selectedResident
+  );
+
+  // ── Check MongoDB + S3 connection on mount ───────────────────────────────
   useEffect(() => {
     fetch("/api/residents")
       .then((r) => r.json())
       .then((d) => setMongoConnected(d.mongoConnected === true))
       .catch(() => setMongoConnected(false));
+
+    fetch("/api/video-clips/presign-upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ residentId: "_ping_", eventType: "_ping_", contentType: "video/webm" }) })
+      .then((r) => r.json())
+      .then((d) => setS3Configured(!d.s3Disabled && !!d.uploadUrl))
+      .catch(() => setS3Configured(false));
   }, []);
 
   // ── Acknowledge event ─────────────────────────────────────────────────────
@@ -90,6 +104,7 @@ export default function Dashboard() {
       const res = await fetch("/api/seed", { method: "POST" });
       const data = await res.json();
       setSeedMessage(data.message ?? "Done");
+      if (data.s3Configured !== undefined) setS3Configured(data.s3Configured);
       setAnalyticsRefreshKey((k) => k + 1);
     } catch {
       setSeedMessage("Seed failed. Check server logs.");
@@ -122,7 +137,7 @@ export default function Dashboard() {
           </div>
 
           {/* Status indicators */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <StatusPill
               active={poseStatus === "running"}
               label={poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
@@ -130,9 +145,21 @@ export default function Dashboard() {
             />
             <StatusPill
               active={mongoConnected}
-              label={mongoConnected ? "MongoDB" : "Demo Mode"}
+              label={mongoConnected ? "MongoDB Connected" : "Demo Mode"}
               color={mongoConnected ? "green" : "yellow"}
             />
+            <StatusPill
+              active={s3Configured}
+              label={s3Configured ? "S3 Clip Storage Ready" : "S3 Not Configured"}
+              color={s3Configured ? "green" : "yellow"}
+            />
+            <button
+              onClick={triggerDemo}
+              disabled={poseStatus !== "running"}
+              className="text-xs bg-red-900/70 hover:bg-red-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-red-200 border border-red-800/60 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              ⚡ Trigger Critical Event
+            </button>
             <button
               onClick={handleSeed}
               disabled={isSeedLoading}
@@ -156,6 +183,25 @@ export default function Dashboard() {
       {seedMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-green-900 text-green-200 border border-green-700 rounded-xl px-4 py-2 text-sm shadow-xl animate-fade-in">
           {seedMessage}
+        </div>
+      )}
+
+      {/* ── Recording status toast ────────────────────────────────────────── */}
+      {recordingMessage && (
+        <div className={`fixed top-20 right-4 z-50 rounded-xl px-4 py-2 text-sm shadow-xl border animate-fade-in flex items-center gap-2
+          ${recordingStatus === "capturing" ? "bg-red-900 text-red-200 border-red-700" :
+            recordingStatus === "uploading" ? "bg-blue-900 text-blue-200 border-blue-700" :
+            recordingStatus === "saved" ? "bg-green-900 text-green-200 border-green-700" :
+            recordingStatus === "s3-disabled" ? "bg-yellow-900/80 text-yellow-200 border-yellow-700" :
+            "bg-red-900 text-red-200 border-red-700"}`}
+        >
+          {recordingStatus === "capturing" && (
+            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+          )}
+          {recordingStatus === "uploading" && (
+            <span className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-300 rounded-full animate-spin" />
+          )}
+          {recordingMessage}
         </div>
       )}
 
@@ -298,11 +344,18 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
     urgentEvents: number;
     assistEvents: number;
     watchEvents: number;
+    totalVideoClips: number;
+    latestVideoClipAt: string | null;
     mostCommonEventType: string | null;
     lastEventAt: string | null;
     recentEvents: SafetyEvent[];
+    videoClips: VideoClip[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewingClip, setViewingClip] = useState<{ id: string; label: string } | null>(null);
+  const [clipUrl, setClipUrl] = useState<string | null>(null);
+  const [clipLoading, setClipLoading] = useState(false);
+  const [clipError, setClipError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -312,6 +365,28 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
       .catch(() => setHistory(null))
       .finally(() => setLoading(false));
   }, [residentId]);
+
+  const handleViewClip = async (clipId: string, label: string) => {
+    setViewingClip({ id: clipId, label });
+    setClipUrl(null);
+    setClipError(null);
+    setClipLoading(true);
+    try {
+      const res = await fetch(`/api/video-clips/${clipId}/playback-url`);
+      const data = await res.json();
+      if (data.s3Disabled) {
+        setClipError("S3 not configured — demo clips are not playable in this deployment.");
+      } else if (data.playbackUrl) {
+        setClipUrl(data.playbackUrl);
+      } else {
+        setClipError(data.error ?? "Could not load clip.");
+      }
+    } catch {
+      setClipError("Failed to load clip URL.");
+    } finally {
+      setClipLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -333,6 +408,7 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
     immobility: "Immobility",
     wandering: "Wandering",
     unsafe_posture: "Unsafe Posture",
+    seizure_like_motion: "Seizure-Like Motion",
     out_of_frame: "Out of Frame",
   };
 
@@ -353,9 +429,9 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
           <p className="text-gray-500">Assist</p>
           <p className="text-orange-300 font-bold text-lg">{history.assistEvents}</p>
         </div>
-        <div className="bg-yellow-950/30 rounded-lg p-2 border border-yellow-900/40">
-          <p className="text-gray-500">Watch</p>
-          <p className="text-yellow-300 font-bold text-lg">{history.watchEvents}</p>
+        <div className="bg-blue-950/30 rounded-lg p-2 border border-blue-900/40">
+          <p className="text-gray-500">Video Clips</p>
+          <p className="text-blue-300 font-bold text-lg">{history.totalVideoClips ?? 0}</p>
         </div>
       </div>
 
@@ -368,40 +444,114 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
         </p>
       )}
 
-      {/* Recent events list */}
-      <div className="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar">
-        {(history.recentEvents ?? []).length === 0 && (
-          <p className="text-gray-600 text-xs text-center py-4">No events recorded</p>
-        )}
-        {(history.recentEvents ?? []).map((e) => (
-          <div
-            key={e._id}
-            className="flex items-start gap-2 text-xs text-gray-400 bg-gray-700/30 rounded-lg p-2"
-          >
-            <span
-              className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
-                e.severity === "urgent"
-                  ? "bg-red-400"
-                  : e.severity === "assist"
-                  ? "bg-orange-400"
-                  : e.severity === "watch"
-                  ? "bg-yellow-400"
-                  : "bg-green-400"
-              }`}
-            />
-            <div className="flex-1 min-w-0">
-              <span className="text-white">{EVENT_LABELS[e.eventType] ?? e.eventType}</span>
-              <span className="text-gray-600 ml-1.5">
-                {new Date(e.createdAt).toLocaleDateString([], {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            </div>
+      {/* Video clips list */}
+      {(history.videoClips ?? []).length > 0 && (
+        <div>
+          <p className="text-[11px] text-gray-500 font-medium mb-1.5">📹 Video Clips</p>
+          <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+            {(history.videoClips ?? []).map((clip) => (
+              <div
+                key={clip._id}
+                className="flex items-center gap-2 text-xs bg-blue-950/20 border border-blue-900/30 rounded-lg p-2"
+              >
+                <span className="text-blue-400 shrink-0">📹</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-blue-200">{EVENT_LABELS[clip.eventType] ?? clip.eventType}</span>
+                  <span className="text-gray-600 ml-1.5">
+                    {new Date(clip.createdAt).toLocaleDateString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span className="text-gray-600 ml-1">· {clip.durationSeconds}s</span>
+                </div>
+                {clip._id && (
+                  <button
+                    onClick={() => handleViewClip(clip._id!, EVENT_LABELS[clip.eventType] ?? clip.eventType)}
+                    className="shrink-0 text-[10px] bg-blue-800/50 hover:bg-blue-700/60 text-blue-200 rounded px-2 py-0.5 transition-colors"
+                  >
+                    View
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+      )}
+
+      {/* Clip viewer modal */}
+      {viewingClip && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setViewingClip(null)}
+        >
+          <div
+            className="relative bg-gray-900 border border-gray-700 rounded-xl p-4 max-w-2xl w-full mx-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-semibold text-sm">📹 {viewingClip.label}</h3>
+              <button onClick={() => setViewingClip(null)} className="text-gray-500 hover:text-white text-lg">✕</button>
+            </div>
+            {clipLoading && (
+              <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+                <span className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin mr-2" />
+                Loading clip…
+              </div>
+            )}
+            {clipError && (
+              <div className="bg-red-950/50 border border-red-800/60 rounded-lg p-4 text-red-300 text-sm">{clipError}</div>
+            )}
+            {clipUrl && (
+              <video src={clipUrl} controls autoPlay className="w-full rounded-lg bg-black max-h-96" />
+            )}
+            <p className="text-[10px] text-gray-600 mt-2 text-center">
+              ⚠️ Prototype only. Not for clinical use. All data is mock/demo data.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Recent events list */}
+      <div>
+        <p className="text-[11px] text-gray-500 font-medium mb-1.5">Recent Events</p>
+        <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+          {(history.recentEvents ?? []).length === 0 && (
+            <p className="text-gray-600 text-xs text-center py-4">No events recorded</p>
+          )}
+          {(history.recentEvents ?? []).map((e) => (
+            <div
+              key={e._id}
+              className="flex items-start gap-2 text-xs text-gray-400 bg-gray-700/30 rounded-lg p-2"
+            >
+              <span
+                className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                  e.severity === "urgent"
+                    ? "bg-red-400"
+                    : e.severity === "assist"
+                    ? "bg-orange-400"
+                    : e.severity === "watch"
+                    ? "bg-yellow-400"
+                    : "bg-green-400"
+                }`}
+              />
+              <div className="flex-1 min-w-0">
+                <span className="text-white">{EVENT_LABELS[e.eventType] ?? e.eventType}</span>
+                {e.hasVideoClip && <span className="ml-1 text-blue-400 text-[10px]">📹</span>}
+                <span className="text-gray-600 ml-1.5">
+                  {new Date(e.createdAt).toLocaleDateString([], {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

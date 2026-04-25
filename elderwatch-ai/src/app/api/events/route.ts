@@ -18,7 +18,10 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { residentId, residentName, room, severity, eventType, confidence, reason, signals } = body;
+    const {
+      residentId, residentName, room, severity, eventType,
+      confidence, reason, signals, videoClip,
+    } = body;
 
     if (!residentId || !severity || !eventType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -38,6 +41,9 @@ export async function POST(req: Request) {
       acknowledged: false,
       acknowledgedBy: null,
       acknowledgedAt: null,
+      hasVideoClip: !!videoClip,
+      videoClipId: null,
+      videoClip: videoClip ?? null,
       createdAt: new Date().toISOString(),
     };
 

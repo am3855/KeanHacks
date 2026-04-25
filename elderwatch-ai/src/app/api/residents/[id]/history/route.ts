@@ -6,9 +6,12 @@ const EMPTY_HISTORY = {
   urgentEvents: 0,
   assistEvents: 0,
   watchEvents: 0,
+  totalVideoClips: 0,
+  latestVideoClipAt: null,
   mostCommonEventType: null,
   lastEventAt: null,
   recentEvents: [],
+  videoClips: [],
 };
 
 export async function GET(

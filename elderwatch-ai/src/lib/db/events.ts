@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getDb, isMongoEnabled } from "../mongodb";
 import { generateMockEvents, getInMemoryStore } from "../mockData";
+import { getVideoClipsByResident } from "./videoClips";
 import type { SafetyEvent, DashboardAnalytics, ResidentHistory, EventTypeValue } from "../types";
 
 const COLLECTION = "safety_events";
@@ -127,7 +128,7 @@ export async function getResidentHistory(residentId: string): Promise<ResidentHi
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString();
 
-  const [todayEvents, allEvents] = await Promise.all([
+  const [todayEvents, allEvents, videoClips] = await Promise.all([
     db
       .collection(COLLECTION)
       .countDocuments({ residentId, createdAt: { $gte: todayStr } }),
@@ -137,6 +138,7 @@ export async function getResidentHistory(residentId: string): Promise<ResidentHi
       .sort({ createdAt: -1 })
       .limit(30)
       .toArray(),
+    getVideoClipsByResident(residentId, 10),
   ]);
 
   const typeCounts: Record<string, number> = {};
@@ -150,9 +152,12 @@ export async function getResidentHistory(residentId: string): Promise<ResidentHi
     urgentEvents: allEvents.filter((e) => e.severity === "urgent").length,
     assistEvents: allEvents.filter((e) => e.severity === "assist").length,
     watchEvents: allEvents.filter((e) => e.severity === "watch").length,
+    totalVideoClips: videoClips.length,
+    latestVideoClipAt: videoClips[0]?.createdAt ?? null,
     mostCommonEventType: (mostCommon?.[0] as EventTypeValue) ?? null,
     lastEventAt: allEvents[0]?.createdAt ?? null,
     recentEvents: allEvents.slice(0, 20) as SafetyEvent[],
+    videoClips,
   };
 }
 

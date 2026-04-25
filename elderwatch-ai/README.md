@@ -61,6 +61,12 @@ The system:
 | AI Care Assistant (mock + Claude) | ✅ MVP |
 | Resident profile selector | ✅ MVP |
 | Demo data seed button | ✅ MVP |
+| S3 critical-event video clip recording | ✅ MVP |
+| Presigned URL upload (browser → S3 direct) | ✅ MVP |
+| Presigned URL playback (temporary signed GET) | ✅ MVP |
+| Video clip history tab with "View Clip" | ✅ MVP |
+| "Trigger Critical Event" demo button | ✅ MVP |
+| Seizure-like motion event type | ✅ MVP |
 
 ---
 
@@ -102,6 +108,8 @@ Canvas chip in the top-left corner shows "● URGENT".
 | Pose Detection | MediaPipe Pose Landmarker (browser, GPU/CPU) |
 | Backend | Next.js API Routes |
 | Database | MongoDB Atlas (optional) + in-memory fallback |
+| Video Storage | Amazon S3 via `@aws-sdk/client-s3` (optional) |
+| Video Capture | Browser MediaRecorder API (WebM/VP9) |
 | Audio Alerts | Web Speech API (`speechSynthesis`) |
 | AI Assistant | Claude API (`claude-haiku`) or mocked responses |
 
@@ -177,9 +185,18 @@ cp .env.local.example .env.local
 Edit `.env.local`:
 
 ```env
-# Optional — app works without these in demo mode
+# MongoDB Atlas (optional — app falls back to in-memory demo mode without it)
 MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DB=kean_hacks_database
+
+# Anthropic API (optional — mock guidance used without it)
 ANTHROPIC_API_KEY=sk-ant-...
+
+# AWS S3 for critical event video clips (optional — events saved without clips if absent)
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_BUCKET=your-elderwatch-clips-bucket
 ```
 
 ### 3. Run
@@ -200,6 +217,60 @@ curl -X POST http://localhost:3000/api/seed
 
 This inserts 3 mock residents, 6 historical safety events, and 2 caregiver notes into MongoDB
 (or pre-loads them into the in-memory store if no MongoDB is configured).
+
+---
+
+## Critical Event Video History
+
+ElderWatch AI stores critical safety event clips using Amazon S3. When an urgent event occurs —
+such as a possible fall or seizure-like motion — the app records a short video clip from the
+webcam and uploads it **directly to S3** using a presigned PUT URL. No video data passes through
+the Next.js server.
+
+MongoDB stores the event history and metadata, including the resident ID, event type, severity,
+clip timestamp, S3 object key, and duration. This keeps large video files out of the database
+while preserving searchable, per-resident safety history.
+
+### How it works
+
+```
+Critical Event Detected
+        │
+        ▼
+Browser records 15s WebM clip (MediaRecorder API)
+        │
+        ▼
+POST /api/video-clips/presign-upload → presigned S3 PUT URL
+        │
+        ▼
+Browser PUT (blob) → S3 directly (no server proxy)
+        │
+        ▼
+POST /api/video-clips → MongoDB: video_clips collection
+        │
+        ▼
+History tab: "📹 Video Clip" badge on event
+"View" button → GET /api/video-clips/[id]/playback-url → presigned GET URL
+```
+
+### S3 + MongoDB Setup
+
+1. Create a [MongoDB Atlas](https://cloud.mongodb.com) free cluster
+2. Set `MONGODB_URI` and `MONGODB_DB` in `.env.local`
+3. Create an S3 bucket in AWS
+4. Create an IAM user with `s3:PutObject` + `s3:GetObject` permissions for that bucket
+5. Set `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET` in `.env.local`
+6. Run `npm install` then `npm run dev`
+7. Click **Seed Demo Data** to pre-load residents and demo events
+8. Click **⚡ Trigger Critical Event** to test the clip recording and upload workflow
+
+The **S3 Clip Storage Ready** status pill in the header shows whether S3 is configured.
+
+> ⚠️ **Privacy disclaimer:** All data in this demo is mock/demo data only. In any real
+> deployment, video clips may contain sensitive health information and require:
+> resident/guardian consent, end-to-end encryption, role-based access controls,
+> a defined retention and deletion policy, and full compliance review (HIPAA, GDPR, etc.).
+> This prototype is not suitable for use with real patients.
 
 ---
 
@@ -232,8 +303,9 @@ is required.
 | Collection | Purpose |
 |---|---|
 | `residents` | Mock resident profiles (seed data) |
-| `safety_events` | Every detected Assist/Urgent/Watch event |
+| `safety_events` | Every detected Assist/Urgent/Watch event (includes optional video clip metadata) |
 | `caregiver_notes` | Caregiver notes attached to specific events |
+| `video_clips` | Clip metadata — S3 key, bucket, duration, timestamps, resident/event link |
 
 ### MongoDB Setup
 

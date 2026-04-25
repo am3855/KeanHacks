@@ -17,6 +17,7 @@ export const EventType = {
   IMMOBILITY: "immobility",
   WANDERING: "wandering",
   UNSAFE_POSTURE: "unsafe_posture",
+  SEIZURE_LIKE_MOTION: "seizure_like_motion",
   OUT_OF_FRAME: "out_of_frame",
   NORMAL: "normal",
 } as const;
@@ -72,6 +73,37 @@ export interface SafetyEvent {
   acknowledged: boolean;
   acknowledgedBy: string | null;
   acknowledgedAt: string | null;
+  hasVideoClip?: boolean;
+  videoClipId?: string | null;
+  videoClip?: VideoClipMeta | null;
+  createdAt: string;
+}
+
+// ─── Inline video clip metadata embedded in a safety event ───────────────────
+export interface VideoClipMeta {
+  s3Key: string;
+  bucket: string;
+  contentType: string;
+  clipStartTime: string;
+  clipEndTime: string;
+  durationSeconds: number;
+}
+
+// ─── A video clip document stored in the video_clips collection ───────────────
+export interface VideoClip {
+  _id?: string;
+  eventId?: string | null;
+  residentId: string;
+  residentName: string;
+  room: string;
+  severity: ResidentStatusValue;
+  eventType: EventTypeValue;
+  s3Key: string;
+  bucket: string;
+  contentType: string;
+  durationSeconds: number;
+  clipStartTime: string;
+  clipEndTime: string;
   createdAt: string;
 }
 
@@ -100,9 +132,12 @@ export interface ResidentHistory {
   urgentEvents: number;
   assistEvents: number;
   watchEvents: number;
+  totalVideoClips: number;
+  latestVideoClipAt: string | null;
   mostCommonEventType: EventTypeValue | null;
   lastEventAt: string | null;
   recentEvents: SafetyEvent[];
+  videoClips: VideoClip[];
 }
 
 // ─── Safe zone rectangle in normalized camera coordinates (0–1) ───────────────

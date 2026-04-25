@@ -7,7 +7,7 @@ import { MongoClient, Db } from "mongodb";
 // Falls back gracefully when MONGODB_URI is not set.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DB_NAME = "elderwatch_ai";
+const DB_NAME = process.env.MONGODB_DB || "elderwatch_ai";
 
 declare global {
   // Cached promise lives on the Node.js global object

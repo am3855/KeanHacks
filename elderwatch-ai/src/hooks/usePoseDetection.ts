@@ -22,6 +22,7 @@ export interface PoseDetectionResult {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   status: PoseStatus;
   errorMessage: string | null;
+  stream: MediaStream | null;
 }
 
 const MEDIAPIPE_WASM =
@@ -40,6 +41,7 @@ export function usePoseDetection(): PoseDetectionResult {
   const [landmarks, setLandmarks] = useState<PoseLandmark[] | null>(null);
   const [status, setStatus] = useState<PoseStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   // ─── Initialize MediaPipe and webcam ───────────────────────────────────────
   useEffect(() => {
@@ -71,6 +73,7 @@ export function usePoseDetection(): PoseDetectionResult {
       }
 
       streamRef.current = stream;
+      setStream(stream);
       const video = videoRef.current;
       if (!video) return;
 
@@ -188,5 +191,5 @@ export function usePoseDetection(): PoseDetectionResult {
     animFrameRef.current = requestAnimationFrame(loop);
   }, []);
 
-  return { landmarks, videoRef, canvasRef, status, errorMessage };
+  return { landmarks, videoRef, canvasRef, status, errorMessage, stream };
 }
