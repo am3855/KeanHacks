@@ -5,9 +5,12 @@ import {
   calculatePostureAngle,
   detectLyingDown,
   calculateMovementScore,
+  calculateMajorBodyMovementScore,
   isInsideSafeZone,
   isPoseVisible,
+  detectHandsNearThroat,
   DEFAULT_SAFE_ZONE,
+  DETECTION_THRESHOLDS,
 } from "@/lib/poseHelpers";
 import { classifyResidentSafety, RECOMMENDED_ACTIONS } from "@/lib/classifySafety";
 import type {
@@ -22,12 +25,16 @@ import type {
 // ─────────────────────────────────────────────────────────────────────────────
 // useResidentMonitor — Converts raw pose landmarks into safety signals, runs
 // the classifier each frame, maintains the local event timeline, and persists
-// meaningful events to the backend (which writes to MongoDB or in-memory store).
+// meaningful events to the backend with per-event-type cooldowns.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOVEMENT_THRESHOLD = 0.02;  // Below this score → count as "still"
-const EVENT_DEBOUNCE_MS = 8000;   // Min ms between persisting the same event type
+const MOVEMENT_THRESHOLD = 0.02; // below → count as "still"
 const MAX_TIMELINE_LENGTH = 50;
+
+interface MonitorOptions {
+  isPaused?: boolean;
+  seizureDetectionEnabled?: boolean;
+}
 
 interface MonitorState {
   signals: SafetySignals;
@@ -38,10 +45,24 @@ interface MonitorState {
 export function useResidentMonitor(
   landmarks: PoseLandmark[] | null,
   resident: ResidentProfile | null,
-  safeZone: SafeZone = DEFAULT_SAFE_ZONE
+  safeZone: SafeZone = DEFAULT_SAFE_ZONE,
+  options: MonitorOptions = {}
 ) {
+  // ── Option refs (avoid re-creating processFrame for option changes) ──────────
+  const isPausedRef = useRef(options.isPaused ?? false);
+  const seizureEnabledRef = useRef(options.seizureDetectionEnabled ?? false);
+  const wasPausedRef = useRef(false);
+  useEffect(() => { isPausedRef.current = options.isPaused ?? false; }, [options.isPaused]);
+  useEffect(() => { seizureEnabledRef.current = options.seizureDetectionEnabled ?? false; }, [options.seizureDetectionEnabled]);
+
+  // ── Time-tracking refs ───────────────────────────────────────────────────────
   const prevLandmarksRef = useRef<PoseLandmark[] | null>(null);
   const stillSinceRef = useRef<number | null>(null);
+  const outsideSafeZoneSinceRef = useRef<number | null>(null);
+  const highMovementSinceRef = useRef<number | null>(null);
+  const handsNearThroatSinceRef = useRef<number | null>(null);
+
+  // Per-event-type last-persisted timestamps (replaces global EVENT_DEBOUNCE_MS)
   const lastPersistedRef = useRef<Record<string, number>>({});
 
   const [state, setState] = useState<MonitorState>(() => ({
@@ -65,16 +86,38 @@ export function useResidentMonitor(
   const processFrame = useCallback(() => {
     if (!resident) return;
 
+    // ── Paused: emit a one-shot "paused" classification, then skip ───────────
+    if (isPausedRef.current) {
+      if (!wasPausedRef.current) {
+        wasPausedRef.current = true;
+        setState((prev) => ({
+          ...prev,
+          classification: {
+            severity: "stable",
+            eventType: "normal",
+            reason: "Monitoring paused",
+            confidence: 0,
+          },
+        }));
+      }
+      return;
+    }
+    wasPausedRef.current = false;
+
     const now = Date.now();
 
-    // ── Compute signals ──────────────────────────────────────────────────────
+    // ── Compute base signals ─────────────────────────────────────────────────
     const visible = landmarks !== null && isPoseVisible(landmarks);
 
     let movementScore = 0;
+    let majorBodyMovementScore = 0;
     let postureAngle = 0;
     let isLyingDown = false;
     let insideSafeZone = true;
     let secondsStill = 0;
+    let secondsOutsideSafeZone = 0;
+    let secondsHighMovement = 0;
+    let handsNearThroatSeconds = 0;
 
     if (visible && landmarks) {
       postureAngle = calculatePostureAngle(landmarks);
@@ -83,27 +126,53 @@ export function useResidentMonitor(
 
       if (prevLandmarksRef.current) {
         movementScore = calculateMovementScore(landmarks, prevLandmarksRef.current);
+        majorBodyMovementScore = calculateMajorBodyMovementScore(landmarks, prevLandmarksRef.current);
       } else {
-        movementScore = 1; // First frame — assume movement
+        movementScore = 1;
+        majorBodyMovementScore = 1;
       }
 
-      // Track stillness duration
+      // Track stillness
       if (movementScore < MOVEMENT_THRESHOLD) {
-        if (stillSinceRef.current === null) {
-          stillSinceRef.current = now;
-        }
+        if (stillSinceRef.current === null) stillSinceRef.current = now;
         secondsStill = (now - stillSinceRef.current) / 1000;
       } else {
         stillSinceRef.current = null;
         secondsStill = 0;
       }
 
-      prevLandmarksRef.current = landmarks;
-    } else {
-      // Resident not visible — maintain stillness counter
-      if (stillSinceRef.current !== null) {
-        secondsStill = (now - stillSinceRef.current) / 1000;
+      // Track time outside safe zone
+      if (!insideSafeZone) {
+        if (outsideSafeZoneSinceRef.current === null) outsideSafeZoneSinceRef.current = now;
+        secondsOutsideSafeZone = (now - outsideSafeZoneSinceRef.current) / 1000;
+      } else {
+        outsideSafeZoneSinceRef.current = null;
+        secondsOutsideSafeZone = 0;
       }
+
+      // Track sustained high movement (for experimental seizure detection)
+      if (movementScore > DETECTION_THRESHOLDS.seizureMovementThreshold) {
+        if (highMovementSinceRef.current === null) highMovementSinceRef.current = now;
+        secondsHighMovement = (now - highMovementSinceRef.current) / 1000;
+      } else {
+        highMovementSinceRef.current = null;
+        secondsHighMovement = 0;
+      }
+
+      // Track hands near throat (for choking detection)
+      const handsNearThroat = detectHandsNearThroat(landmarks);
+      if (handsNearThroat) {
+        if (handsNearThroatSinceRef.current === null) handsNearThroatSinceRef.current = now;
+        handsNearThroatSeconds = (now - handsNearThroatSinceRef.current) / 1000;
+      } else {
+        handsNearThroatSinceRef.current = null;
+        handsNearThroatSeconds = 0;
+      }
+
+      prevLandmarksRef.current = landmarks;
+    } else if (stillSinceRef.current !== null) {
+      // Not visible — maintain stillness counter
+      secondsStill = (now - stillSinceRef.current) / 1000;
     }
 
     const signals: SafetySignals = {
@@ -113,31 +182,27 @@ export function useResidentMonitor(
       secondsStill,
       insideSafeZone,
       visible,
+      secondsOutsideSafeZone,
+      secondsHighMovement,
+      handsNearThroatSeconds,
+      majorBodyMovementScore,
     };
 
-    console.debug("[ElderWatch]", {
-      landmarksLength: landmarks?.length ?? 0,
-      visible,
-      isLyingDown,
-      movementScore: +movementScore.toFixed(3),
-      postureAngle: +postureAngle.toFixed(1),
-      secondsStill: +secondsStill.toFixed(1),
-      insideSafeZone,
+    const classification = classifyResidentSafety(signals, {
+      seizureDetectionEnabled: seizureEnabledRef.current,
     });
 
-    const classification = classifyResidentSafety(signals);
-
-    // ── Persist meaningful events (debounced per event type) ────────────────
+    // ── Persist meaningful events with per-event-type cooldowns ─────────────
     if (classification.severity !== "stable") {
+      const cooldown = DETECTION_THRESHOLDS.eventCooldowns[classification.eventType] ?? 30_000;
       const lastTime = lastPersistedRef.current[classification.eventType] ?? 0;
-      if (now - lastTime > EVENT_DEBOUNCE_MS) {
+      if (now - lastTime > cooldown) {
         lastPersistedRef.current[classification.eventType] = now;
         persistEvent(resident, classification, signals);
       }
     }
 
     setState((prev) => {
-      // Only update timeline when classification changes or on first event
       const changed =
         prev.classification.severity !== classification.severity ||
         prev.classification.eventType !== classification.eventType;
@@ -153,7 +218,7 @@ export function useResidentMonitor(
               eventType: classification.eventType,
               confidence: classification.confidence,
               reason: classification.reason,
-              recommendedAction: "",
+              recommendedAction: RECOMMENDED_ACTIONS[classification.eventType] ?? "",
               signals,
               source: "live_camera" as const,
               acknowledged: false,
@@ -192,14 +257,14 @@ export function useResidentMonitor(
           timeline: [...prev.timeline, ...residentEvents].slice(0, MAX_TIMELINE_LENGTH),
         }));
       } catch {
-        // Non-fatal — dashboard still works from local state
+        // Non-fatal
       }
     }
     loadHistory();
     return () => { active = false; };
   }, [resident?.id]);
 
-  // ── Demo event injector — used by the "Trigger Critical Event" button ────────
+  // ── Demo event injector ────────────────────────────────────────────────────
   const injectDemoEvent = useCallback((
     eventType: SafetyEvent["eventType"] = "possible_fall",
     severity: SafetyEvent["severity"] = "urgent"
@@ -209,10 +274,12 @@ export function useResidentMonitor(
     const demoSignals: SafetySignals = {
       isLyingDown: severity === "urgent" && eventType === "possible_fall",
       movementScore: eventType === "seizure_like_motion" ? 0.9 : 0.05,
-      postureAngle: eventType === "unsafe_posture" ? 65 : 8,
+      postureAngle: eventType === "unsafe_posture" ? 65 : eventType === "possible_choking" ? 30 : 8,
       secondsStill: eventType === "possible_fall" ? 12 : 0,
       insideSafeZone: true,
       visible: true,
+      handsNearThroatSeconds: eventType === "possible_choking" ? 5 : 0,
+      secondsHighMovement: eventType === "seizure_like_motion" ? 8 : 0,
     };
     const demoEvent: SafetyEvent = {
       _id: `demo_${now}`,
@@ -232,9 +299,7 @@ export function useResidentMonitor(
       hasVideoClip: false,
       createdAt: new Date().toISOString(),
     };
-    // Persist to backend
     persistEvent(resident, { severity, eventType, reason: demoEvent.reason, confidence: 0.88 }, demoSignals);
-    // Inject into local timeline immediately so the user sees it right away
     setState((prev) => ({
       ...prev,
       classification: { severity, eventType, reason: demoEvent.reason, confidence: 0.88 },
@@ -251,6 +316,10 @@ function persistEvent(
   classification: SafetyClassification,
   signals: SafetySignals
 ) {
+  // Strip the runtime-only timing fields before persisting (they're undefined anyway)
+  const { secondsOutsideSafeZone, secondsHighMovement, handsNearThroatSeconds, majorBodyMovementScore, ...coreSignals } = signals;
+  void secondsOutsideSafeZone; void secondsHighMovement; void handsNearThroatSeconds; void majorBodyMovementScore;
+
   fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -262,7 +331,7 @@ function persistEvent(
       eventType: classification.eventType,
       confidence: classification.confidence,
       reason: classification.reason,
-      signals,
+      signals: coreSignals,
     }),
   }).catch(() => {/* Non-fatal */});
 }

@@ -18,6 +18,10 @@ const EVENT_LABELS: Record<string, string> = {
   unsafe_posture: "Unsafe Posture",
   seizure_like_motion: "Possible Seizure-Like Movement",
   out_of_frame: "Out of Frame",
+  audio_distress: "Audio Distress",
+  possible_distress_sound: "Possible Distress Sound",
+  possible_fall_sound: "Possible Fall Sound",
+  possible_choking: "Possible Choking",
   normal: "Normal",
 };
 
@@ -29,6 +33,10 @@ const EVENT_ICONS: Record<string, string> = {
   unsafe_posture: "↗️",
   seizure_like_motion: "⚡",
   out_of_frame: "👁️",
+  audio_distress: "🎙️",
+  possible_distress_sound: "🔊",
+  possible_fall_sound: "💥",
+  possible_choking: "🫁",
   normal: "✅",
 };
 
@@ -174,6 +182,11 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
                         ✓ Acknowledged
                       </span>
                     )}
+                    {event.source === "audio_monitor" && (
+                      <span className="text-[10px] bg-purple-900/50 text-purple-300 border border-purple-800 rounded-full px-1.5 py-0.5">
+                        🎙️ Audio
+                      </span>
+                    )}
                     {event.hasVideoClip && (
                       <span className="text-[10px] bg-blue-900/50 text-blue-300 border border-blue-800 rounded-full px-1.5 py-0.5">
                         📹 Video Clip
@@ -192,6 +205,14 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
               {isExpanded && (
                 <div className="px-3 pb-3 border-t border-gray-700/50 pt-2 space-y-2 animate-fade-in">
                   <p className="text-gray-300 text-xs">{event.reason}</p>
+
+                  {event.audioTranscript && (
+                    <div className="bg-purple-950/30 border border-purple-900/40 rounded-lg px-2.5 py-1.5">
+                      <p className="text-[9px] text-purple-400 mb-0.5">Transcript</p>
+                      <p className="text-xs text-purple-200 italic">"{event.audioTranscript}"</p>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-gray-400">
                     <span>Confidence: <b className="text-white">{Math.round(event.confidence * 100)}%</b></span>
                     <span>Posture: <b className="text-white">{Math.round(event.signals.postureAngle)}°</b></span>

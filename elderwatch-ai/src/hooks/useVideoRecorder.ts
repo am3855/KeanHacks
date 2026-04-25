@@ -22,15 +22,15 @@ export type RecordingStatus =
   | "error"
   | "s3-disabled";
 
-const CLIP_DURATION_MS = 15_000;  // record 15 seconds per clip
-const COOLDOWN_MS = 45_000;        // 45s between recordings for the same resident
-const TRIGGER_SEVERITIES = new Set(["urgent", "assist"]);
+const CLIP_DURATION_MS = 15_000;   // 15-second clip
+const COOLDOWN_MS = 120_000;       // 2 minutes between clips per resident
+// Only record clips for urgent events to prevent S3 spam
+const TRIGGER_SEVERITIES = new Set(["urgent"]);
 const TRIGGER_EVENTS = new Set([
   "possible_fall",
-  "fall_risk",
-  "immobility",
-  "unsafe_posture",
   "seizure_like_motion",
+  "possible_choking",
+  "audio_distress",
 ]);
 
 export interface VideoRecorderResult {
@@ -43,7 +43,9 @@ export interface VideoRecorderResult {
 export function useVideoRecorder(
   stream: MediaStream | null,
   classification: SafetyClassification,
-  resident: ResidentProfile | null
+  resident: ResidentProfile | null,
+  micStream?: MediaStream | null,
+  isPaused?: boolean
 ): VideoRecorderResult {
   const [status, setStatus] = useState<RecordingStatus>("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -101,6 +103,7 @@ export function useVideoRecorder(
       if (!uploadRes.ok) throw new Error(`S3 PUT failed: ${uploadRes.status}`);
 
       // 3. Save clip metadata in MongoDB
+      const hasMic = !!(micStreamRef.current?.getAudioTracks().length);
       await fetch("/api/video-clips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,6 +121,8 @@ export function useVideoRecorder(
           ),
           clipStartTime,
           clipEndTime,
+          hasVideoTrack: true,
+          hasAudioTrack: hasMic,
         }),
       });
 
@@ -134,19 +139,39 @@ export function useVideoRecorder(
     }
   }, []);
 
+  const isPausedRef = useRef(isPaused ?? false);
+  useEffect(() => { isPausedRef.current = isPaused ?? false; }, [isPaused]);
+
+  // Keep micStream ref current for async callbacks
+  const micStreamRef = useRef(micStream ?? null);
+  useEffect(() => { micStreamRef.current = micStream ?? null; }, [micStream]);
+
   // ── Start recording a clip ───────────────────────────────────────────────────
   const startRecording = useCallback(() => {
     if (!stream || isRecordingRef.current) return;
-    if (Date.now() < cooldownUntilRef.current) return;
+    if (isPausedRef.current) return;
+    if (Date.now() < cooldownUntilRef.current) {
+      console.log("[VideoRecorder] Skipped — cooldown active");
+      return;
+    }
 
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+    // Merge microphone audio tracks with video when available
+    const mic = micStreamRef.current;
+    const recordingStream =
+      mic && mic.getAudioTracks().length > 0
+        ? new MediaStream([...stream.getVideoTracks(), ...mic.getAudioTracks()])
+        : stream;
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+      ? "video/webm;codecs=vp9,opus"
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
       : MediaRecorder.isTypeSupported("video/webm")
       ? "video/webm"
       : "";
 
     try {
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : {});
       recorderRef.current = recorder;
       chunksRef.current = [];
       isRecordingRef.current = true;
@@ -185,6 +210,7 @@ export function useVideoRecorder(
   useEffect(() => {
     if (
       stream &&
+      !isPausedRef.current &&
       TRIGGER_SEVERITIES.has(classification.severity) &&
       TRIGGER_EVENTS.has(classification.eventType)
     ) {

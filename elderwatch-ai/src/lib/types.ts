@@ -19,6 +19,10 @@ export const EventType = {
   UNSAFE_POSTURE: "unsafe_posture",
   SEIZURE_LIKE_MOTION: "seizure_like_motion",
   OUT_OF_FRAME: "out_of_frame",
+  AUDIO_DISTRESS: "audio_distress",
+  POSSIBLE_DISTRESS_SOUND: "possible_distress_sound",
+  POSSIBLE_FALL_SOUND: "possible_fall_sound",
+  POSSIBLE_CHOKING: "possible_choking",
   NORMAL: "normal",
 } as const;
 
@@ -42,11 +46,16 @@ export interface ResidentProfile {
 // ─── Pose-derived safety signals computed each frame ─────────────────────────
 export interface SafetySignals {
   isLyingDown: boolean;
-  movementScore: number;   // 0–1: 0 = no movement, 1 = lots of movement
-  postureAngle: number;    // degrees from vertical (0 = upright, 90 = horizontal)
-  secondsStill: number;    // seconds since last significant movement
-  insideSafeZone: boolean; // whether resident is within the defined safe zone
-  visible: boolean;        // whether any pose was detected this frame
+  movementScore: number;          // 0–1: 0 = no movement, 1 = lots of movement
+  postureAngle: number;           // degrees from vertical (0 = upright, 90 = horizontal)
+  secondsStill: number;           // seconds since last significant movement
+  insideSafeZone: boolean;        // whether resident is within the defined safe zone
+  visible: boolean;               // whether any pose was detected this frame
+  // Time-based signals — populated by useResidentMonitor, undefined in persisted records
+  secondsOutsideSafeZone?: number;   // continuous seconds torso center has been outside safe zone
+  secondsHighMovement?: number;      // continuous seconds of sustained high movement (seizure detection)
+  handsNearThroatSeconds?: number;   // continuous seconds with hands near throat area (choking)
+  majorBodyMovementScore?: number;   // movement score using only torso/head landmarks (excl. wrists)
 }
 
 // ─── Result of applying the safety classifier ────────────────────────────────
@@ -69,7 +78,8 @@ export interface SafetyEvent {
   reason: string;
   recommendedAction: string;
   signals: SafetySignals;
-  source: "live_camera" | "manual";
+  source: "live_camera" | "audio_monitor" | "manual";
+  audioTranscript?: string | null;
   acknowledged: boolean;
   acknowledgedBy: string | null;
   acknowledgedAt: string | null;
@@ -104,6 +114,11 @@ export interface VideoClip {
   durationSeconds: number;
   clipStartTime: string;
   clipEndTime: string;
+  hasAudioTrack?: boolean;
+  hasVideoTrack?: boolean;
+  transcript?: string | null;
+  matchedKeywords?: string[];
+  matchedAudioTags?: string[];
   createdAt: string;
 }
 

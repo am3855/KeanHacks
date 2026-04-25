@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { MOCK_RESIDENTS } from "@/lib/mockData";
 import { DEFAULT_SAFE_ZONE } from "@/lib/poseHelpers";
@@ -12,6 +12,7 @@ import ResidentCard from "@/components/ResidentCard";
 import EventTimeline from "@/components/EventTimeline";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import AIAssistant from "@/components/AIAssistant";
+import AudioMonitor from "@/components/AudioMonitor";
 import type { ResidentProfile, SafetyEvent, VideoClip } from "@/lib/types";
 
 // PoseCamera uses canvas/webcam APIs — load client-only
@@ -26,6 +27,10 @@ export default function Dashboard() {
   const [selectedResidentId, setSelectedResidentId] = useState<string>(MOCK_RESIDENTS[0].id);
   const [mongoConnected, setMongoConnected] = useState(false);
   const [s3Configured, setS3Configured] = useState(false);
+  const [elevenLabsConfigured, setElevenLabsConfigured] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [seizureDetectionEnabled, setSeizureDetectionEnabled] = useState(false);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [isSeedLoading, setIsSeedLoading] = useState(false);
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
@@ -40,17 +45,20 @@ export default function Dashboard() {
   const { signals, classification, timeline, injectDemoEvent } = useResidentMonitor(
     landmarks,
     selectedResident,
-    DEFAULT_SAFE_ZONE
+    DEFAULT_SAFE_ZONE,
+    { isPaused, seizureDetectionEnabled }
   );
 
   // ── TTS + visual alerts ───────────────────────────────────────────────────
   useAlerts(classification, selectedResident);
 
-  // ── Critical event video recording ───────────────────────────────────────
+  // ── Critical event video recording (with optional mic audio) ─────────────
   const { recordingStatus, statusMessage: recordingMessage, triggerDemo } = useVideoRecorder(
     stream,
     classification,
-    selectedResident
+    selectedResident,
+    micStreamRef.current,
+    isPaused
   );
 
   // ── Combined demo trigger: inject event into timeline + start recording ──
@@ -70,6 +78,11 @@ export default function Dashboard() {
       .then((r) => r.json())
       .then((d) => setS3Configured(d.s3Configured === true))
       .catch(() => setS3Configured(false));
+
+    fetch("/api/audio/analyze")
+      .then((r) => r.json())
+      .then((d) => setElevenLabsConfigured(d.elevenLabsConfigured === true))
+      .catch(() => setElevenLabsConfigured(false));
   }, []);
 
   // ── Acknowledge event ─────────────────────────────────────────────────────
@@ -144,10 +157,15 @@ export default function Dashboard() {
 
           {/* Status indicators */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            {isPaused && (
+              <span className="text-xs font-bold text-yellow-300 bg-yellow-900/60 border border-yellow-700 rounded-lg px-3 py-1.5 animate-pulse">
+                ⏸ MONITORING PAUSED
+              </span>
+            )}
             <StatusPill
-              active={poseStatus === "running"}
-              label={poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
-              color={poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
+              active={poseStatus === "running" && !isPaused}
+              label={isPaused ? "Paused" : poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
+              color={isPaused ? "yellow" : poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
             />
             <StatusPill
               active={mongoConnected}
@@ -156,12 +174,28 @@ export default function Dashboard() {
             />
             <StatusPill
               active={s3Configured}
-              label={s3Configured ? "S3 Clip Storage Ready" : "S3 Not Configured"}
+              label={s3Configured ? "S3 Ready" : "S3 Off"}
               color={s3Configured ? "green" : "yellow"}
             />
+            <StatusPill
+              active={elevenLabsConfigured}
+              label={elevenLabsConfigured ? "STT Ready" : "STT Off"}
+              color={elevenLabsConfigured ? "green" : "yellow"}
+            />
+            {/* Pause / Resume */}
+            <button
+              onClick={() => setIsPaused((p) => !p)}
+              className={`text-xs rounded-lg px-3 py-1.5 transition-colors border font-medium ${
+                isPaused
+                  ? "bg-green-900/70 hover:bg-green-800/80 text-green-200 border-green-700"
+                  : "bg-yellow-900/70 hover:bg-yellow-800/80 text-yellow-200 border-yellow-700"
+              }`}
+            >
+              {isPaused ? "▶ Resume Monitoring" : "⏸ Pause Monitoring"}
+            </button>
             <button
               onClick={handleTriggerDemo}
-              disabled={poseStatus !== "running"}
+              disabled={poseStatus !== "running" || isPaused}
               className="text-xs bg-red-900/70 hover:bg-red-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-red-200 border border-red-800/60 rounded-lg px-3 py-1.5 transition-colors"
             >
               ⚡ Trigger Critical Event
@@ -237,10 +271,35 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Analytics + AI in a 2-col grid on wider screens */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Experimental seizure detection toggle */}
+          <div className="flex items-center gap-2.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={seizureDetectionEnabled}
+                onChange={(e) => setSeizureDetectionEnabled(e.target.checked)}
+                className="w-3.5 h-3.5 accent-purple-500"
+              />
+              <span className="text-xs text-gray-400">
+                <span className="text-purple-300 font-medium">Experimental:</span> Seizure-like movement detection
+              </span>
+            </label>
+            <span className="text-[10px] text-gray-600 ml-auto">
+              {seizureDetectionEnabled ? "ON — requires 6s sustained motion" : "OFF (default — prevents false positives)"}
+            </span>
+          </div>
+
+          {/* Analytics + AI + Audio Monitor in a 3-col grid on wider screens */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <AnalyticsCard mongoConnected={mongoConnected} refreshTrigger={analyticsRefreshKey} />
             <AIAssistant resident={selectedResident} classification={classification} />
+            <AudioMonitor
+              resident={selectedResident}
+              isPaused={isPaused}
+              onCriticalAudioDetected={triggerDemo}
+              onInjectDemoEvent={injectDemoEvent as (eventType: string, severity: string) => void}
+              onMicStream={(s) => { micStreamRef.current = s; }}
+            />
           </div>
         </div>
 
@@ -416,6 +475,10 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
     unsafe_posture: "Unsafe Posture",
     seizure_like_motion: "Seizure-Like Motion",
     out_of_frame: "Out of Frame",
+    audio_distress: "Audio Distress",
+    possible_distress_sound: "Distress Sound",
+    possible_fall_sound: "Fall Sound",
+    possible_choking: "Possible Choking",
   };
 
   return (
@@ -545,6 +608,7 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
               />
               <div className="flex-1 min-w-0">
                 <span className="text-white">{EVENT_LABELS[e.eventType] ?? e.eventType}</span>
+                {e.source === "audio_monitor" && <span className="ml-1 text-purple-400 text-[10px]">🎙️</span>}
                 {e.hasVideoClip && <span className="ml-1 text-blue-400 text-[10px]">📹</span>}
                 <span className="text-gray-600 ml-1.5">
                   {new Date(e.createdAt).toLocaleDateString([], {

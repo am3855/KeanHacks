@@ -49,7 +49,7 @@ The system:
 | Live webcam feed with pose skeleton overlay | ✅ MVP |
 | Real-time fall detection | ✅ MVP |
 | Immobility detection (>5 min stillness) | ✅ MVP |
-| Wandering detection (safe zone exit) | ✅ MVP |
+| Wandering detection (safe zone exit, 3s debounce) | ✅ MVP |
 | Unsafe posture detection | ✅ MVP |
 | Caregiver dashboard with status badge | ✅ MVP |
 | Event timeline with timestamps | ✅ MVP |
@@ -61,12 +61,16 @@ The system:
 | AI Care Assistant (mock + Claude) | ✅ MVP |
 | Resident profile selector | ✅ MVP |
 | Demo data seed button | ✅ MVP |
-| S3 critical-event video clip recording | ✅ MVP |
+| S3 critical-event video clip recording (urgent only, 2 min cooldown) | ✅ MVP |
 | Presigned URL upload (browser → S3 direct) | ✅ MVP |
 | Presigned URL playback (temporary signed GET) | ✅ MVP |
 | Video clip history tab with "View Clip" | ✅ MVP |
 | "Trigger Critical Event" demo button | ✅ MVP |
-| Seizure-like motion event type | ✅ MVP |
+| Seizure-like movement detection (experimental, conservative, off by default) | ✅ MVP |
+| ElevenLabs audio monitoring (STT + distress classification) | ✅ MVP |
+| Audio-based choking / breathing distress detection | ✅ MVP |
+| Vision-based choking detection (hands near throat heuristic) | ✅ MVP |
+| Pause Monitoring (stops all detection, classification, and S3 uploads) | ✅ MVP |
 
 ---
 
@@ -111,6 +115,7 @@ Canvas chip in the top-left corner shows "● URGENT".
 | Video Storage | Amazon S3 via `@aws-sdk/client-s3` (optional) |
 | Video Capture | Browser MediaRecorder API (WebM/VP9) |
 | Audio Alerts | Web Speech API (`speechSynthesis`) |
+| Audio STT | ElevenLabs `scribe_v2` (optional) |
 | AI Assistant | Claude API (`claude-haiku`) or mocked responses |
 
 ---
@@ -121,41 +126,49 @@ Canvas chip in the top-left corner shows "● URGENT".
 Browser
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│  Webcam (getUserMedia)                                          │
-│       │                                                         │
-│       ▼                                                         │
-│  MediaPipe Pose Landmarker ──► 33 landmarks (normalized x,y,z) │
-│       │                                                         │
+│  Webcam (getUserMedia)         Microphone (getUserMedia)        │
+│       │                               │                         │
+│       ▼                               ▼                         │
+│  MediaPipe Pose Landmarker     MediaRecorder (6s chunks)        │
+│  33 landmarks (normalized x,y,z)      │                         │
+│       │                               └──► POST /api/audio/analyze
 │       ▼                                                         │
 │  poseHelpers.ts                                                 │
-│  • calculatePostureAngle()   → degrees from vertical            │
-│  • detectLyingDown()         → boolean                         │
-│  • calculateMovementScore()  → 0–1 delta between frames         │
-│  • isInsideSafeZone()        → boolean                         │
+│  • calculatePostureAngle()     → degrees from vertical          │
+│  • detectLyingDown()           → boolean                        │
+│  • calculateMovementScore()    → 0–1 (all landmarks)            │
+│  • calculateMajorBodyMovementScore() → 0–1 (no wrists)         │
+│  • getBodyCenter()             → torso center (shoulder+hip avg)│
+│  • isInsideSafeZone()          → boolean (6% margin)            │
+│  • detectHandsNearThroat()     → boolean                        │
 │       │                                                         │
 │       ▼                                                         │
 │  classifySafety.ts                                              │
-│  • classifyResidentSafety(signals) → { severity, eventType,    │
-│                                        reason, confidence }     │
+│  • classifyResidentSafety(signals, options)                     │
+│    → { severity, eventType, reason, confidence }                │
 │       │                                                         │
 │       ├──► Dashboard UI (ResidentCard, EventTimeline, etc.)     │
 │       │    • Color-coded severity badge                         │
 │       │    • Pulsing visual border on Assist/Urgent             │
 │       │    • Browser TTS announcement                           │
 │       │                                                         │
-│       └──► POST /api/events (debounced, 8s)                     │
+│       └──► POST /api/events (per-event-type cooldown)           │
 │                 │                                               │
-└─────────────────┼───────────────────────────────────────────────┘
-                  │
-Server (Next.js API Routes)
-┌─────────────────┼───────────────────────────────────────────────┐
-│                 ▼                                               │
-│  /api/events    ──► MongoDB: safety_events collection           │
-│  /api/residents ──► MongoDB: residents collection               │
-│  /api/analytics ──► MongoDB aggregation pipeline               │
-│  /api/assistant ──► Claude API or mock guidance                 │
-│  /api/seed      ──► Seed demo data                              │
+│  [Urgent only] ─┴──► useVideoRecorder → S3 presigned PUT        │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
+                  │                  │
+Server (Next.js API Routes)          │
+┌─────────────────┼──────────────────┼──────────────────────────┐
+│                 ▼                  ▼                           │
+│  /api/events         ──► MongoDB: safety_events collection     │
+│  /api/audio/analyze  ──► ElevenLabs STT → MongoDB event        │
+│  /api/residents      ──► MongoDB: residents collection         │
+│  /api/analytics      ──► MongoDB aggregation pipeline          │
+│  /api/assistant      ──► Claude API or mock guidance           │
+│  /api/seed           ──► Seed demo data                        │
+│  /api/video-clips    ──► Presign S3 upload / MongoDB metadata  │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -197,6 +210,9 @@ AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
 AWS_S3_BUCKET=your-elderwatch-clips-bucket
+
+# ElevenLabs STT for audio monitoring (optional — simulate mode available without it)
+ELEVENLABS_API_KEY=sk_...
 ```
 
 ### 3. Run
@@ -319,7 +335,7 @@ is required.
 
 ## Detection Logic
 
-All detection is **rule-based** using pose landmarks — no custom ML training required.
+All visual detection is **rule-based** using pose landmarks — no custom ML training required.
 
 ### Signal Extraction (`src/lib/poseHelpers.ts`)
 
@@ -328,9 +344,13 @@ All detection is **rule-based** using pose landmarks — no custom ML training r
 | `postureAngle` | `atan2(|shoulderMid.x − hipMid.x|, |shoulderMid.y − hipMid.y|)` — angle of torso from vertical |
 | `isLyingDown` | Torso angle > 50° **or** horizontal body spread > 1.3× vertical spread |
 | `movementScore` | Average Euclidean delta of 7 key landmarks between consecutive frames, normalized 0–1 |
+| `majorBodyMovementScore` | Same as `movementScore` but uses only nose, shoulders, and hips — excludes wrists/elbows to avoid false seizure triggers from arm movement |
 | `secondsStill` | Elapsed time since `movementScore` last exceeded 0.02 threshold |
-| `insideSafeZone` | Hip midpoint within the configured rectangle (default: 80% of frame) |
-| `visible` | Core landmarks (shoulders + hips) all have visibility > 0.4 |
+| `insideSafeZone` | **Torso center** (average of all available shoulder + hip landmarks) within the configured rectangle, with 6% outward margin to absorb boundary glitches. Default zone covers ~96% of the frame height. |
+| `secondsOutsideSafeZone` | Elapsed time since torso center first left the safe zone — wandering only fires after 3 continuous seconds |
+| `secondsHighMovement` | Elapsed time since `majorBodyMovementScore` continuously exceeded seizure threshold — seizure detection requires ≥ 6 sustained seconds |
+| `handsNearThroatSeconds` | Elapsed time both wrists have been within 0.12 normalized units of the throat area (midpoint between nose and shoulder midpoint) |
+| `visible` | At least 2 of 5 core landmarks (nose, shoulders, hips) have visibility > 0.3 |
 
 ### Classification Rules (`src/lib/classifySafety.ts`)
 
@@ -340,10 +360,121 @@ All detection is **rule-based** using pose landmarks — no custom ML training r
 | 2 | `isLyingDown && movementScore < 0.1 && secondsStill > 10` | Urgent | possible_fall |
 | 3 | `isLyingDown && movementScore >= 0.1` | Assist | fall_risk |
 | 4 | `secondsStill > 300` | Assist | immobility |
-| 5 | `!insideSafeZone` | Watch | wandering |
-| 6 | `postureAngle > 60` | Assist | unsafe_posture |
-| 7 | `postureAngle > 35` | Watch | unsafe_posture |
-| 8 | — | Stable | normal |
+| 5 | `handsNearThroatSeconds >= 3 && postureAngle > 15 && !isLyingDown` | Urgent | possible_choking |
+| 6 | `seizureEnabled && !isLyingDown && secondsHighMovement >= 6 && movementScore > 0.70 && majorBodyMovementScore > 0.55` | Urgent | seizure_like_motion |
+| 7 | `!insideSafeZone && secondsOutsideSafeZone >= 3` | Watch | wandering |
+| 8 | `postureAngle > 60` | Assist | unsafe_posture |
+| 9 | `postureAngle > 35` | Watch | unsafe_posture |
+| 10 | — | Stable | normal |
+
+### Audio Classification (`src/lib/elevenlabs.ts`)
+
+When ElevenLabs is configured, each 6-second audio chunk is transcribed and classified:
+
+| Priority | Condition | Severity | Event |
+|---|---|---|---|
+| 1 | Choking keyword matched (e.g. "can't breathe", "gasping") | Urgent | possible_choking |
+| 2 | ≥ 2 distress keywords **or** 1 keyword + vocal distress audio tag | Urgent | audio_distress |
+| 3 | 1 distress keyword, choking/breathing sound tag, or distress vocal tag | Assist | possible_distress_sound / possible_choking |
+| 4 | Fall-sound audio tag (thud, bang, crash) only | Watch | possible_fall_sound |
+| 5 | No indicators | Stable | normal |
+
+Distress keywords include: `help`, `i fell`, `can't get up`, `pain`, `emergency`, etc.  
+Choking keywords include: `choking`, `can't breathe`, `gasping`, `no air`, `struggling to breathe`, etc.
+
+---
+
+## Monitoring Behavior Notes
+
+### Safe Zone
+
+The default safe zone covers nearly the full camera frame (x: 8%, y: 2%, width: 84%, height: 96%).
+Wandering detection uses the **torso center** (average of all available shoulder and hip landmarks)
+rather than just hips, so a seated or leaning person is accurately placed. A 6% outward margin
+and a **3-second continuous-exit debounce** prevent momentary boundary glitches from firing alerts.
+
+### Seizure-Like Movement Detection
+
+Seizure-like movement detection is **experimental and off by default**. Enable it via the toggle
+in the dashboard header. When enabled, an alert fires only when:
+
+- Major-body movement score (nose + shoulders + hips only, excluding wrists) exceeds 0.55
+- Overall movement score exceeds 0.70
+- Both conditions persist for **≥ 6 continuous seconds**
+- The resident is not lying down
+
+This conservative threshold is designed to tolerate normal activities (standing up, reaching,
+gesturing). The dashboard and event labels use the phrasing **"Possible Seizure-Like Movement"**
+with the note "caregiver should check" — this system detects sustained rapid body movement and
+does not diagnose seizures.
+
+### Choking Detection
+
+Choking can be detected from two independent sources:
+
+**Audio (ElevenLabs):** Keywords like "choking", "can't breathe", "gasping", "no air" in
+transcribed speech trigger an **Urgent** alert immediately. Breathing-sound tags (coughing,
+wheezing, gasping) without keywords trigger an **Assist** alert.
+
+**Vision (pose):** If both wrists are within ~12% of normalized frame width of the throat
+landmark (midpoint between nose and shoulder midpoint) **continuously for ≥ 3 seconds** and
+the resident is not lying flat, an **Urgent** choking alert fires.
+
+### Pause Monitoring
+
+The **Pause Monitoring** button in the dashboard header stops all activity:
+
+- Visual pose classification is suspended (no new events classified or persisted)
+- Audio monitoring analysis is skipped (mic continues recording but chunks are not sent to ElevenLabs)
+- S3 video clip recording is blocked
+- A "MONITORING PAUSED" badge appears in the header
+- The AI assistant question form is disabled while paused
+
+This is intended for use when a caregiver is physically present in the room and manual monitoring
+is not needed, or when the system needs to be temporarily silenced during a planned activity.
+
+### S3 Video Clip Recording
+
+Critical-event clips are recorded **only for `urgent` severity events** (possible fall, possible
+choking, audio distress, seizure-like movement). Watch and Assist events do not trigger recording.
+A **2-minute per-event-type cooldown** prevents the same event type from generating multiple clips
+in a short window. This limits S3 storage costs and avoids clip spam during sustained alerts.
+
+### Per-Event-Type Cooldowns
+
+Each event type has an independent cooldown that limits how often it can be persisted to MongoDB:
+
+| Event | Cooldown |
+|---|---|
+| wandering | 60 s |
+| fall_risk | 60 s |
+| unsafe_posture | 60 s |
+| audio_distress | 60 s |
+| possible_distress_sound | 60 s |
+| possible_fall | 120 s |
+| immobility | 120 s |
+| possible_choking | 120 s |
+| possible_fall_sound | 120 s |
+| out_of_frame | 60 s |
+| seizure_like_motion | 180 s |
+
+---
+
+## Audio Monitoring (ElevenLabs)
+
+The **Audio Monitor** card uses the browser microphone to continuously capture audio in 6-second
+chunks. Each chunk is sent to `POST /api/audio/analyze`, which calls the ElevenLabs `scribe_v2`
+model to transcribe speech and detect non-speech audio events (thuds, coughing, crying, etc.).
+
+The transcript and audio event tags are classified for distress using keyword matching. If a
+distress condition is detected, a safety event is persisted to MongoDB and injected into the
+event timeline in real time — exactly like a vision-detected event.
+
+A **Simulate** button fires a hardcoded "Help! I can't get up" transcript for demo purposes
+without requiring a microphone.
+
+If `ELEVENLABS_API_KEY` is not set, the Audio Monitor card shows a "Configure ELEVENLABS_API_KEY"
+notice and only the Simulate button is available.
 
 ---
 
@@ -364,22 +495,29 @@ elderwatch-ai/
 │   │       ├── events/[id]/notes/route.ts
 │   │       ├── analytics/route.ts
 │   │       ├── seed/route.ts
-│   │       └── assistant/route.ts    # AI care guidance
+│   │       ├── assistant/route.ts    # AI care guidance
+│   │       ├── audio/analyze/route.ts  # ElevenLabs STT + distress classification
+│   │       ├── video-clips/route.ts
+│   │       ├── video-clips/presign-upload/route.ts
+│   │       └── video-clips/[id]/playback-url/route.ts
 │   ├── components/
 │   │   ├── PoseCamera.tsx            # Canvas with video + skeleton + safe zone
 │   │   ├── ResidentCard.tsx          # Profile + current status + signal pills
-│   │   ├── EventTimeline.tsx         # Scrollable event list with ack + notes
+│   │   ├── EventTimeline.tsx         # Scrollable event list with ack + notes + audio transcript
 │   │   ├── AnalyticsCard.tsx         # 24h MongoDB stats
 │   │   ├── SafetyBadge.tsx           # Reusable severity badge
-│   │   └── AIAssistant.tsx           # Guidance panel
+│   │   ├── AIAssistant.tsx           # Guidance panel
+│   │   └── AudioMonitor.tsx          # Mic capture + ElevenLabs STT card
 │   ├── hooks/
 │   │   ├── usePoseDetection.ts       # MediaPipe init + webcam + rAF loop
-│   │   ├── useResidentMonitor.ts     # Signal extraction + classification + persistence
+│   │   ├── useResidentMonitor.ts     # Signal extraction + classification + persistence (pause-aware)
+│   │   ├── useVideoRecorder.ts       # S3 clip recording (urgent-only, cooldown-limited)
 │   │   └── useAlerts.ts              # TTS alerts (debounced)
 │   └── lib/
 │       ├── types.ts                  # All TypeScript types and constants
-│       ├── classifySafety.ts         # Core safety classifier
-│       ├── poseHelpers.ts            # Signal extraction from landmarks
+│       ├── classifySafety.ts         # Core safety classifier (choking, seizure, pause support)
+│       ├── poseHelpers.ts            # Signal extraction — torso center, major-body score, throat heuristic
+│       ├── elevenlabs.ts             # ElevenLabs STT + audio distress keyword classifier
 │       ├── mockData.ts               # MOCK DATA ONLY — not real patients
 │       ├── mongodb.ts                # MongoDB connection helper
 │       └── db/
@@ -407,6 +545,12 @@ elderwatch-ai/
 - [x] Resident event history panel
 - [x] AI Care Assistant (mock + Claude API)
 - [x] Demo data seed endpoint
+- [x] S3 critical-event video clip recording (urgent-only, 2 min cooldown)
+- [x] ElevenLabs STT audio monitoring with distress + choking classification
+- [x] Vision-based choking detection (sustained hands-near-throat heuristic)
+- [x] Experimental seizure-like movement detection (conservative 6s threshold, toggle)
+- [x] Pause Monitoring — suspends all classification, audio analysis, and S3 recording
+- [x] Per-event-type debounce cooldowns for MongoDB and S3
 
 ### Future Work
 

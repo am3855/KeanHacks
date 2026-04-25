@@ -33,6 +33,14 @@ const BASE_RESPONSES: Record<string, string> = {
     "Possible seizure-like movement was detected. Go to the resident immediately. Do NOT restrain them. Clear the area of hard objects and protect their head with something soft if possible. Time the episode. Call medical staff and follow your facility's seizure response protocol. Note: this system detects rapid movement patterns only — it does not diagnose seizures. Always rely on direct observation and medical assessment.",
   out_of_frame:
     "The resident is no longer visible on camera. Perform a manual check of the room and nearby areas. If they cannot be found within a few minutes, alert your supervisor per facility protocol.",
+  audio_distress:
+    "Verbal distress was detected via the audio monitor. Go to the resident immediately, speak calmly, and assess what they need. If they are in pain or injured, follow your facility's emergency protocol.",
+  possible_distress_sound:
+    "A possible distress sound was detected. Perform a check on the resident. Approach calmly and ask if they need assistance. If you observe anything concerning, escalate to your supervisor.",
+  possible_fall_sound:
+    "A possible fall impact sound was detected. Check on the resident's location and physical condition. If they have fallen, follow your facility's fall response protocol.",
+  possible_choking:
+    "Possible choking or breathing difficulty was detected. Go to the resident immediately. Ask if they can speak or breathe normally. If choking is confirmed, follow your facility's choking response protocol and call emergency services if needed. This system does not diagnose choking — always rely on direct observation.",
   normal:
     "No concerns are currently detected. Continue your routine monitoring. Use this time to review the event log and follow up on any previously acknowledged alerts.",
 };
@@ -52,6 +60,14 @@ const EMERGENCY_RESPONSES: Record<string, string> = {
     "Yes — treat this as an emergency. Call for medical staff immediately. Do not restrain the resident. Stay with them, protect their head, and time the episode. If this is a first seizure or lasts more than 5 minutes, call emergency services. Do not leave them alone.",
   out_of_frame:
     "Perform a manual check immediately. If the resident cannot be found within a few minutes, treat it as an emergency and follow your missing-resident protocol.",
+  audio_distress:
+    "Yes — treat this as urgent. Get to the resident immediately. If they are unresponsive, in pain, or unable to get up, call for help and follow your emergency protocol.",
+  possible_distress_sound:
+    "Treat this as a high-priority check. Reach the resident quickly and determine if they need help. If in doubt, escalate.",
+  possible_fall_sound:
+    "Investigate promptly. If the resident has fallen, follow your facility's fall response protocol. Do not attempt to move them if injury is suspected.",
+  possible_choking:
+    "Yes — treat this as urgent. Get to the resident immediately. If they cannot speak or breathe, call emergency services and follow your facility's choking response protocol. Do not leave them alone.",
   normal:
     "No active alerts at this time. If you personally observe something concerning, always trust your judgment and escalate as needed.",
 };
@@ -71,6 +87,14 @@ const DOCUMENT_RESPONSES: Record<string, string> = {
     "Document: exact time the alert fired, duration of any observed movement, the resident's condition before and after, actions taken, staff involved, and medical staff notified. Complete an incident report. If a seizure was confirmed, note whether it was a first occurrence or recurrence.",
   out_of_frame:
     "Log the time the resident went off-camera, when and where they were located, and any context for why they left the monitored area.",
+  audio_distress:
+    "Document: exact time of audio alert, transcript of detected speech if available, matched keywords, your response time, the resident's condition when checked, and any actions taken. Complete an incident report if the situation was serious.",
+  possible_distress_sound:
+    "Log the time, the audio event type detected, what you observed when you checked, and any resident complaint or explanation.",
+  possible_fall_sound:
+    "Record the time of the audio alert, what sound was detected, the resident's condition when checked, and any actions taken. If a fall occurred, complete an incident report.",
+  possible_choking:
+    "Document: exact time of alert, source (audio/vision), resident's condition when assessed, ability to speak or breathe, actions taken, and outcome. Complete an incident report. If emergency services were called, note the response time.",
   normal:
     "No specific incident to document. Review the event log for any unacknowledged alerts from the past shift and add notes where appropriate.",
 };
@@ -90,6 +114,14 @@ const HELP_RESPONSES: Record<string, string> = {
     "Go to the resident immediately. Do NOT restrain them — move hazardous objects away instead. If the resident is in a chair or bed, stay close to support them. When the movement stops, gently turn them on their side (recovery position), call for medical staff, and stay until help arrives.",
   out_of_frame:
     "Do a systematic check: bathroom, common areas, adjacent rooms. Bring a radio or phone so you can call for backup quickly if needed.",
+  audio_distress:
+    "Go to the resident immediately. Speak calmly and clearly. Ask what they need and listen carefully. If they are in pain or distress, do not leave them alone — call for help and stay until assistance arrives.",
+  possible_distress_sound:
+    "Knock and enter calmly. Call the resident by name and ask if they are okay. Check their condition and ask if they need anything. If something seems wrong, escalate.",
+  possible_fall_sound:
+    "Go to the resident. Check whether they have fallen or are on the floor. If so, stay with them, do not move them without assessing for injury, and call for backup.",
+  possible_choking:
+    "Go to the resident immediately. Ask: 'Are you choking? Can you breathe?' If they cannot breathe or speak, call emergency services and begin first aid per your training. If they are coughing forcefully, encourage them to continue and stay close.",
   normal:
     "No intervention required right now. A friendly check-in is always welcome — knock, say hello, and confirm the resident is comfortable.",
 };
