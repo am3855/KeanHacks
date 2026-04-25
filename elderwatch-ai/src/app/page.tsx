@@ -37,7 +37,7 @@ export default function Dashboard() {
   const { landmarks, videoRef, canvasRef, status: poseStatus, errorMessage, stream } = usePoseDetection();
 
   // ── Safety monitoring ─────────────────────────────────────────────────────
-  const { signals, classification, timeline } = useResidentMonitor(
+  const { signals, classification, timeline, injectDemoEvent } = useResidentMonitor(
     landmarks,
     selectedResident,
     DEFAULT_SAFE_ZONE
@@ -53,6 +53,12 @@ export default function Dashboard() {
     selectedResident
   );
 
+  // ── Combined demo trigger: inject event into timeline + start recording ──
+  const handleTriggerDemo = useCallback(() => {
+    injectDemoEvent("possible_fall", "urgent");
+    triggerDemo();
+  }, [injectDemoEvent, triggerDemo]);
+
   // ── Check MongoDB + S3 connection on mount ───────────────────────────────
   useEffect(() => {
     fetch("/api/residents")
@@ -60,9 +66,9 @@ export default function Dashboard() {
       .then((d) => setMongoConnected(d.mongoConnected === true))
       .catch(() => setMongoConnected(false));
 
-    fetch("/api/video-clips/presign-upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ residentId: "_ping_", eventType: "_ping_", contentType: "video/webm" }) })
+    fetch("/api/video-clips/presign-upload")
       .then((r) => r.json())
-      .then((d) => setS3Configured(!d.s3Disabled && !!d.uploadUrl))
+      .then((d) => setS3Configured(d.s3Configured === true))
       .catch(() => setS3Configured(false));
   }, []);
 
@@ -154,7 +160,7 @@ export default function Dashboard() {
               color={s3Configured ? "green" : "yellow"}
             />
             <button
-              onClick={triggerDemo}
+              onClick={handleTriggerDemo}
               disabled={poseStatus !== "running"}
               className="text-xs bg-red-900/70 hover:bg-red-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-red-200 border border-red-800/60 rounded-lg px-3 py-1.5 transition-colors"
             >

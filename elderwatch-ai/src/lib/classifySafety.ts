@@ -42,7 +42,20 @@ export function classifyResidentSafety(signals: SafetySignals): SafetyClassifica
     };
   }
 
-  // 4. Prolonged immobility — no movement for more than 5 minutes
+  // 4. Possible seizure-like motion — very high rapid movement while upright
+  // NOTE: This is a simplistic heuristic for demo purposes only. It fires when
+  // the pose landmarks show large, rapid frame-to-frame movement in an upright
+  // position. Do NOT use this as a medical seizure detector.
+  if (!signals.isLyingDown && signals.movementScore > 0.78 && signals.secondsStill === 0) {
+    return {
+      severity: ResidentStatus.URGENT,
+      eventType: EventType.SEIZURE_LIKE_MOTION,
+      reason: "Possible seizure-like movement — high-frequency motion detected while upright",
+      confidence: 0.65,
+    };
+  }
+
+  // 5. Prolonged immobility — no movement for more than 5 minutes
   if (signals.secondsStill > 300) {
     return {
       severity: ResidentStatus.ASSIST,
@@ -52,7 +65,7 @@ export function classifyResidentSafety(signals: SafetySignals): SafetyClassifica
     };
   }
 
-  // 5. Wandering — resident left the designated safe zone
+  // 6. Wandering — resident left the designated safe zone
   if (!signals.insideSafeZone) {
     return {
       severity: ResidentStatus.WATCH,
@@ -62,7 +75,7 @@ export function classifyResidentSafety(signals: SafetySignals): SafetyClassifica
     };
   }
 
-  // 6. Unsafe posture — torso heavily tilted (slumping, leaning dangerously)
+  // 7. Unsafe posture — torso heavily tilted (slumping, leaning dangerously)
   if (signals.postureAngle > 60) {
     return {
       severity: ResidentStatus.ASSIST,
@@ -72,7 +85,7 @@ export function classifyResidentSafety(signals: SafetySignals): SafetyClassifica
     };
   }
 
-  // 7. Watch — mildly elevated posture angle (early warning)
+  // 8. Watch — mildly elevated posture angle (early warning)
   if (signals.postureAngle > 35) {
     return {
       severity: ResidentStatus.WATCH,

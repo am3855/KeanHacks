@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { isS3Configured, createPresignedUploadUrl, getS3Bucket } from "@/lib/s3";
 
+// GET /api/video-clips/presign-upload — lightweight S3 status check, no URL generated
+export async function GET() {
+  return NextResponse.json({ s3Configured: isS3Configured() });
+}
+
 // POST /api/video-clips/presign-upload
 // Returns a presigned S3 PUT URL so the browser can upload a clip directly to S3.
 // No video data passes through the Next.js server.

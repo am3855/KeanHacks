@@ -9,7 +9,7 @@ import {
   isPoseVisible,
   DEFAULT_SAFE_ZONE,
 } from "@/lib/poseHelpers";
-import { classifyResidentSafety } from "@/lib/classifySafety";
+import { classifyResidentSafety, RECOMMENDED_ACTIONS } from "@/lib/classifySafety";
 import type {
   PoseLandmark,
   SafetySignals,
@@ -199,7 +199,50 @@ export function useResidentMonitor(
     return () => { active = false; };
   }, [resident?.id]);
 
-  return state;
+  // ── Demo event injector — used by the "Trigger Critical Event" button ────────
+  const injectDemoEvent = useCallback((
+    eventType: SafetyEvent["eventType"] = "possible_fall",
+    severity: SafetyEvent["severity"] = "urgent"
+  ) => {
+    if (!resident) return;
+    const now = Date.now();
+    const demoSignals: SafetySignals = {
+      isLyingDown: severity === "urgent" && eventType === "possible_fall",
+      movementScore: eventType === "seizure_like_motion" ? 0.9 : 0.05,
+      postureAngle: eventType === "unsafe_posture" ? 65 : 8,
+      secondsStill: eventType === "possible_fall" ? 12 : 0,
+      insideSafeZone: true,
+      visible: true,
+    };
+    const demoEvent: SafetyEvent = {
+      _id: `demo_${now}`,
+      residentId: resident.id,
+      residentName: resident.name,
+      room: resident.room,
+      severity,
+      eventType,
+      confidence: 0.88,
+      reason: `[Demo] ${eventType.replace(/_/g, " ")} simulated via demo trigger`,
+      recommendedAction: RECOMMENDED_ACTIONS[eventType] ?? "",
+      signals: demoSignals,
+      source: "live_camera",
+      acknowledged: false,
+      acknowledgedBy: null,
+      acknowledgedAt: null,
+      hasVideoClip: false,
+      createdAt: new Date().toISOString(),
+    };
+    // Persist to backend
+    persistEvent(resident, { severity, eventType, reason: demoEvent.reason, confidence: 0.88 }, demoSignals);
+    // Inject into local timeline immediately so the user sees it right away
+    setState((prev) => ({
+      ...prev,
+      classification: { severity, eventType, reason: demoEvent.reason, confidence: 0.88 },
+      timeline: [demoEvent, ...prev.timeline].slice(0, MAX_TIMELINE_LENGTH),
+    }));
+  }, [resident]);
+
+  return { ...state, injectDemoEvent };
 }
 
 // ─── Fire-and-forget event persistence ───────────────────────────────────────

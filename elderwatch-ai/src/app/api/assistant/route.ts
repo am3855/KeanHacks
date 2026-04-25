@@ -29,6 +29,8 @@ const BASE_RESPONSES: Record<string, string> = {
     "The resident has moved outside their designated safe area. Approach calmly without startling them and gently redirect them back to their room or common area. Note the time and circumstances in the care log. Consider whether the resident's environment needs adjustment.",
   unsafe_posture:
     "The resident's posture appears unstable. Assist them to a comfortable, well-supported position. Ask if they feel dizzy or in pain. If they report any discomfort, do not force movement and request a clinical assessment.",
+  seizure_like_motion:
+    "Possible seizure-like movement was detected. Go to the resident immediately. Do NOT restrain them. Clear the area of hard objects and protect their head with something soft if possible. Time the episode. Call medical staff and follow your facility's seizure response protocol. Note: this system detects rapid movement patterns only — it does not diagnose seizures. Always rely on direct observation and medical assessment.",
   out_of_frame:
     "The resident is no longer visible on camera. Perform a manual check of the room and nearby areas. If they cannot be found within a few minutes, alert your supervisor per facility protocol.",
   normal:
@@ -46,6 +48,8 @@ const EMERGENCY_RESPONSES: Record<string, string> = {
     "Not typically an emergency, but locate the resident quickly. If they are near a hazardous area or seem confused, get additional staff to assist with a safe redirect.",
   unsafe_posture:
     "If the resident appears in pain, very unsteady, or unresponsive, treat this as urgent and request immediate clinical assessment.",
+  seizure_like_motion:
+    "Yes — treat this as an emergency. Call for medical staff immediately. Do not restrain the resident. Stay with them, protect their head, and time the episode. If this is a first seizure or lasts more than 5 minutes, call emergency services. Do not leave them alone.",
   out_of_frame:
     "Perform a manual check immediately. If the resident cannot be found within a few minutes, treat it as an emergency and follow your missing-resident protocol.",
   normal:
@@ -63,6 +67,8 @@ const DOCUMENT_RESPONSES: Record<string, string> = {
     "Note the time, where the resident was found, their apparent orientation (confused/calm), how they were redirected, and any changes in behaviour worth flagging.",
   unsafe_posture:
     "Document the time, observed posture angle or lean, any complaints of dizziness or pain, and the corrective action taken. If a clinical check was requested, note the outcome.",
+  seizure_like_motion:
+    "Document: exact time the alert fired, duration of any observed movement, the resident's condition before and after, actions taken, staff involved, and medical staff notified. Complete an incident report. If a seizure was confirmed, note whether it was a first occurrence or recurrence.",
   out_of_frame:
     "Log the time the resident went off-camera, when and where they were located, and any context for why they left the monitored area.",
   normal:
@@ -80,6 +86,8 @@ const HELP_RESPONSES: Record<string, string> = {
     "Use a calm, familiar tone. Do not block or grab them — walk alongside and gently guide them back. Distraction (e.g., mentioning a meal or activity) can help with redirecting.",
   unsafe_posture:
     "Approach from the front, introduce yourself, and ask permission before adjusting their position. Use a gait belt if needed and ensure their back is supported before leaving.",
+  seizure_like_motion:
+    "Go to the resident immediately. Do NOT restrain them — move hazardous objects away instead. If the resident is in a chair or bed, stay close to support them. When the movement stops, gently turn them on their side (recovery position), call for medical staff, and stay until help arrives.",
   out_of_frame:
     "Do a systematic check: bathroom, common areas, adjacent rooms. Bring a radio or phone so you can call for backup quickly if needed.",
   normal:
