@@ -4,14 +4,18 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import type { SafetyClassification, ResidentProfile } from "@/lib/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// useVideoRecorder — Records a short clip when a high-severity event occurs,
-// uploads it directly to S3 via a presigned PUT URL, and saves the metadata
-// in MongoDB. Falls back gracefully when S3 is not configured.
+// useVideoRecorder — Records a short combined audio+video clip when a
+// high-severity event occurs, uploads it directly to S3 via a presigned PUT
+// URL, and saves the metadata in MongoDB.
 //
-// Note: Uses post-event recording (starts on event detection) rather than a
-// rolling pre-event buffer. Rolling buffers require keyframe-aware chunking
-// which is unreliable across browsers on MediaRecorder; the simple approach
-// is more reliable for a hackathon demo.
+// All critical event paths (visual, audio, manual, simulated) call
+// startRecording which is the single shared recording function.
+//
+// On each startRecording call:
+//   1. Uses the mic stream passed in from AudioMonitor if available.
+//   2. If no mic stream, tries navigator.mediaDevices.getUserMedia({ audio }).
+//   3. Combines video + audio tracks into one MediaStream before recording.
+//   4. Falls back to video-only if mic is denied/unavailable.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type RecordingStatus =
@@ -58,11 +62,22 @@ export function useVideoRecorder(
   // Keep refs current so async callbacks always see the latest props
   const residentRef = useRef(resident);
   const classificationRef = useRef(classification);
+  const micStreamRef = useRef(micStream ?? null);
+  const isPausedRef = useRef(isPaused ?? false);
+
   useEffect(() => { residentRef.current = resident; }, [resident]);
   useEffect(() => { classificationRef.current = classification; }, [classification]);
+  useEffect(() => { micStreamRef.current = micStream ?? null; }, [micStream]);
+  useEffect(() => { isPausedRef.current = isPaused ?? false; }, [isPaused]);
 
   // ── Core upload + save function ─────────────────────────────────────────────
-  const uploadClip = useCallback(async (blob: Blob, clipStartTime: string, clipEndTime: string) => {
+  const uploadClip = useCallback(async (
+    blob: Blob,
+    clipStartTime: string,
+    clipEndTime: string,
+    hasVideoTrack: boolean,
+    hasAudioTrack: boolean
+  ) => {
     const currentResident = residentRef.current;
     const currentClass = classificationRef.current;
     if (!currentResident) { isRecordingRef.current = false; return; }
@@ -102,9 +117,10 @@ export function useVideoRecorder(
       });
       if (!uploadRes.ok) throw new Error(`S3 PUT failed: ${uploadRes.status}`);
 
+      console.log("[VideoRecorder] Critical clip uploaded", s3Key);
+
       // 3. Save clip metadata in MongoDB
-      const hasMic = !!(micStreamRef.current?.getAudioTracks().length);
-      await fetch("/api/video-clips", {
+      const clipRes = await fetch("/api/video-clips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,6 +129,7 @@ export function useVideoRecorder(
           room: currentResident.room,
           severity: currentClass.severity,
           eventType: currentClass.eventType,
+          source: "live_camera",
           s3Key,
           bucket,
           contentType: blob.type || "video/webm",
@@ -121,13 +138,22 @@ export function useVideoRecorder(
           ),
           clipStartTime,
           clipEndTime,
-          hasVideoTrack: true,
-          hasAudioTrack: hasMic,
+          hasVideoTrack,
+          hasAudioTrack,
         }),
       });
 
+      if (clipRes.ok) {
+        const clipData = await clipRes.json();
+        console.log("[VideoRecorder] Critical clip attached to event", clipData._id ?? clipData.id ?? "saved");
+      }
+
       setStatus("saved");
-      setStatusMessage("Clip saved");
+      setStatusMessage(
+        hasAudioTrack
+          ? "Clip saved (audio + video)"
+          : "Clip saved (video only — mic unavailable)"
+      );
       setTimeout(() => { setStatus("idle"); setStatusMessage(null); }, 6000);
     } catch (err) {
       console.error("[VideoRecorder] Upload error:", err);
@@ -139,14 +165,8 @@ export function useVideoRecorder(
     }
   }, []);
 
-  const isPausedRef = useRef(isPaused ?? false);
-  useEffect(() => { isPausedRef.current = isPaused ?? false; }, [isPaused]);
-
-  // Keep micStream ref current for async callbacks
-  const micStreamRef = useRef(micStream ?? null);
-  useEffect(() => { micStreamRef.current = micStream ?? null; }, [micStream]);
-
   // ── Start recording a clip ───────────────────────────────────────────────────
+  // This is the single shared recording function used by all critical event paths.
   const startRecording = useCallback(() => {
     if (!stream || isRecordingRef.current) return;
     if (isPausedRef.current) return;
@@ -155,58 +175,91 @@ export function useVideoRecorder(
       return;
     }
 
-    // Merge microphone audio tracks with video when available
-    const mic = micStreamRef.current;
-    const recordingStream =
-      mic && mic.getAudioTracks().length > 0
-        ? new MediaStream([...stream.getVideoTracks(), ...mic.getAudioTracks()])
+    const eventType = classificationRef.current?.eventType ?? "unknown";
+    console.log("[VideoRecorder] Critical clip recording requested", eventType, "source=visual/manual");
+
+    void (async () => {
+      // Try to get mic audio — use existing AudioMonitor stream if available,
+      // otherwise request a fresh audio-only stream.
+      let mic: MediaStream | null = micStreamRef.current;
+      let ownedMicStream: MediaStream | null = null;
+
+      if (!mic || mic.getAudioTracks().length === 0) {
+        try {
+          ownedMicStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true },
+            video: false,
+          });
+          mic = ownedMicStream;
+        } catch {
+          // Microphone denied or unavailable — continue with video-only
+        }
+      }
+
+      const videoTracks = stream.getVideoTracks();
+      const audioTracks = mic ? mic.getAudioTracks() : [];
+      const hasAudio = audioTracks.length > 0;
+
+      const recordingStream = hasAudio
+        ? new MediaStream([...videoTracks, ...audioTracks])
         : stream;
 
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-      ? "video/webm;codecs=vp9,opus"
-      : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-      ? "video/webm;codecs=vp9"
-      : MediaRecorder.isTypeSupported("video/webm")
-      ? "video/webm"
-      : "";
+      console.log("[VideoRecorder] Combined stream tracks", videoTracks.length, audioTracks.length);
 
-    try {
-      const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : {});
-      recorderRef.current = recorder;
-      chunksRef.current = [];
-      isRecordingRef.current = true;
-      cooldownUntilRef.current = Date.now() + COOLDOWN_MS;
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+        ? "video/webm;codecs=vp9,opus"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : MediaRecorder.isTypeSupported("video/webm")
+        ? "video/webm"
+        : "";
 
-      const clipStartTime = new Date().toISOString();
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
-        const clipEndTime = new Date().toISOString();
+      try {
+        const recorder = new MediaRecorder(recordingStream, mimeType ? { mimeType } : {});
+        recorderRef.current = recorder;
         chunksRef.current = [];
-        recorderRef.current = null;
-        uploadClip(blob, clipStartTime, clipEndTime);
-      };
+        isRecordingRef.current = true;
+        cooldownUntilRef.current = Date.now() + COOLDOWN_MS;
 
-      recorder.start(1000);
-      setStatus("capturing");
-      setStatusMessage("Recording critical event clip…");
+        const clipStartTime = new Date().toISOString();
 
-      setTimeout(() => {
-        if (recorderRef.current && recorderRef.current.state === "recording") {
-          recorderRef.current.stop();
-        }
-      }, CLIP_DURATION_MS);
-    } catch (err) {
-      console.error("[VideoRecorder] Failed to start recorder:", err);
-      isRecordingRef.current = false;
-    }
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        recorder.onstop = () => {
+          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
+          const clipEndTime = new Date().toISOString();
+          chunksRef.current = [];
+          recorderRef.current = null;
+          // Stop any mic stream we own (not the shared AudioMonitor stream)
+          if (ownedMicStream) ownedMicStream.getTracks().forEach((t) => t.stop());
+          uploadClip(blob, clipStartTime, clipEndTime, videoTracks.length > 0, hasAudio);
+        };
+
+        recorder.start(1000);
+        console.log("[VideoRecorder] MediaRecorder started");
+        setStatus("capturing");
+        setStatusMessage(
+          hasAudio
+            ? "Recording critical event clip…"
+            : "Microphone unavailable — saved video-only clip."
+        );
+
+        setTimeout(() => {
+          if (recorderRef.current && recorderRef.current.state === "recording") {
+            recorderRef.current.stop();
+          }
+        }, CLIP_DURATION_MS);
+      } catch (err) {
+        console.error("[VideoRecorder] Failed to start recorder:", err);
+        isRecordingRef.current = false;
+        if (ownedMicStream) ownedMicStream.getTracks().forEach((t) => t.stop());
+      }
+    })();
   }, [stream, uploadClip]);
 
-  // ── Watch for critical classification changes ────────────────────────────────
+  // ── Watch for critical classification changes (visual event trigger) ─────────
   useEffect(() => {
     if (
       stream &&
@@ -218,14 +271,14 @@ export function useVideoRecorder(
     }
   }, [classification.severity, classification.eventType, stream, startRecording]);
 
-  // ── Demo trigger ─────────────────────────────────────────────────────────────
+  // ── Demo / manual / audio trigger ────────────────────────────────────────────
   const triggerDemo = useCallback(() => {
     if (!stream) {
       setStatusMessage("Webcam not available for demo clip");
       setTimeout(() => setStatusMessage(null), 3000);
       return;
     }
-    cooldownUntilRef.current = 0; // bypass cooldown for demo
+    cooldownUntilRef.current = 0; // bypass cooldown for manual triggers
     startRecording();
   }, [stream, startRecording]);
 

@@ -44,7 +44,7 @@ export const DETECTION_THRESHOLDS = {
   chokingCooldownMs: 120_000,
 
   // Safe zone: expand inward tolerance so transient boundary touches don't trigger
-  safeZoneMargin: 0.06,
+  safeZoneMargin: 0.05,
 
   // Video clip: only record on urgent, 2-minute cooldown per resident
   criticalClipCooldownMs: 120_000,
@@ -251,13 +251,21 @@ export function isPoseVisible(landmarks: PoseLandmark[]): boolean {
   return count >= 2;
 }
 
-// ─── Default safe zone: nearly full frame (8% margins, 2% top/2% bottom) ─────
-// With safeZoneMargin of 6%, the effective torso-center threshold is ~1–2%
-// inside the frame border, preventing false wandering alerts during testing.
+// ─── Clamp a safe zone so all values are valid ────────────────────────────────
+// x+width ≤ 1, y+height ≤ 1, width/height ≥ 0.1
+export function clampSafeZone(z: SafeZone): SafeZone {
+  const x = Math.max(0, Math.min(0.9, z.x));
+  const y = Math.max(0, Math.min(0.9, z.y));
+  const width = Math.max(0.1, Math.min(1 - x, z.width));
+  const height = Math.max(0.1, Math.min(1 - y, z.height));
+  return { x, y, width, height };
+}
+
+// ─── Default safe zone: almost full frame (4% left/right, 2% top/bottom) ─────
 export const DEFAULT_SAFE_ZONE: SafeZone = {
-  x: 0.08,
+  x: 0.04,
   y: 0.02,
-  width: 0.84,
+  width: 0.92,
   height: 0.96,
 };
 

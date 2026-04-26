@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { POSE_CONNECTIONS } from "@/lib/poseHelpers";
+import { useEffect, useRef, useCallback } from "react";
+import { POSE_CONNECTIONS, clampSafeZone } from "@/lib/poseHelpers";
 import type { PoseLandmark, SafeZone, ResidentStatusValue } from "@/lib/types";
 import type { PoseStatus } from "@/hooks/usePoseDetection";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PoseCamera — Renders video + skeleton overlay on a canvas, plus the safe zone
 // rectangle and a live status chip in the corner.
+//
+// When editMode is true the user can drag corner handles or the whole safe zone
+// box directly on the canvas. Normalized (0-1) coordinates are reported back
+// via onSafeZoneChange.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PoseCameraProps {
@@ -18,6 +22,21 @@ interface PoseCameraProps {
   errorMessage: string | null;
   safeZone: SafeZone;
   severity: ResidentStatusValue;
+  /** When true the user can drag the safe zone on the canvas */
+  editMode?: boolean;
+  /** Called with updated zone coordinates while the user drags */
+  onSafeZoneChange?: (zone: SafeZone) => void;
+  /** Used to show the subtle "Outside zone…" indicator */
+  insideSafeZone?: boolean;
+}
+
+type DragHandle = "tl" | "tr" | "bl" | "br" | "move";
+
+interface DragState {
+  handle: DragHandle;
+  startNX: number;  // pointer position in normalized canvas coords at drag start
+  startNY: number;
+  startZone: SafeZone;
 }
 
 const SEVERITY_COLORS: Record<ResidentStatusValue, string> = {
@@ -29,8 +48,11 @@ const SEVERITY_COLORS: Record<ResidentStatusValue, string> = {
 
 const SKELETON_COLOR = "#60a5fa"; // blue-400
 const JOINT_COLOR = "#93c5fd";    // blue-300
-const SAFE_ZONE_COLOR = "rgba(34, 197, 94, 0.35)";
+const SAFE_ZONE_COLOR = "rgba(34, 197, 94, 0.25)";
 const SAFE_ZONE_BORDER = "#22c55e";
+const SAFE_ZONE_EDIT_BORDER = "#86efac"; // brighter green in edit mode
+const HANDLE_SIZE = 12;   // pixels (in canvas space)
+const HANDLE_HIT_NORM = 0.035; // normalized hit-test radius for corner handles
 
 export default function PoseCamera({
   videoRef,
@@ -40,10 +62,90 @@ export default function PoseCamera({
   errorMessage,
   safeZone,
   severity,
+  editMode = false,
+  onSafeZoneChange,
+  insideSafeZone = true,
 }: PoseCameraProps) {
   const drawingRef = useRef<number>(0);
+  const dragRef = useRef<DragState | null>(null);
 
-  // ─── Canvas drawing loop ───────────────────────────────────────────────────
+  // Keep a ref to the latest safeZone so the drawing loop always uses current values
+  // without being recreated on every prop change.
+  const safeZoneRef = useRef(safeZone);
+  const editModeRef = useRef(editMode);
+  const insideSafeZoneRef = useRef(insideSafeZone);
+  useEffect(() => { safeZoneRef.current = safeZone; }, [safeZone]);
+  useEffect(() => { editModeRef.current = editMode; }, [editMode]);
+  useEffect(() => { insideSafeZoneRef.current = insideSafeZone; }, [insideSafeZone]);
+
+  // ── Convert canvas CSS pointer coords → normalized (0-1) ─────────────────────
+  const toNormalized = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { nx: 0, ny: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      nx: (clientX - rect.left) / rect.width,
+      ny: (clientY - rect.top) / rect.height,
+    };
+  }, [canvasRef]);
+
+  // ── Pointer down: hit-test handles then box interior ─────────────────────────
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!editMode || !onSafeZoneChange) return;
+    e.preventDefault();
+    const { nx, ny } = toNormalized(e.clientX, e.clientY);
+    const z = safeZoneRef.current;
+
+    // Corner hit-test (normalized distance check)
+    const corners: { id: DragHandle; cx: number; cy: number }[] = [
+      { id: "tl", cx: z.x,            cy: z.y },
+      { id: "tr", cx: z.x + z.width,  cy: z.y },
+      { id: "bl", cx: z.x,            cy: z.y + z.height },
+      { id: "br", cx: z.x + z.width,  cy: z.y + z.height },
+    ];
+
+    for (const corner of corners) {
+      if (Math.abs(nx - corner.cx) < HANDLE_HIT_NORM && Math.abs(ny - corner.cy) < HANDLE_HIT_NORM) {
+        dragRef.current = { handle: corner.id, startNX: nx, startNY: ny, startZone: { ...z } };
+        (e.target as Element).setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+
+    // Interior of box → move
+    if (nx >= z.x && nx <= z.x + z.width && ny >= z.y && ny <= z.y + z.height) {
+      dragRef.current = { handle: "move", startNX: nx, startNY: ny, startZone: { ...z } };
+      (e.target as Element).setPointerCapture(e.pointerId);
+    }
+  }, [editMode, onSafeZoneChange, toNormalized]);
+
+  // ── Pointer move: update safe zone while dragging ─────────────────────────────
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag || !onSafeZoneChange) return;
+
+    const { nx, ny } = toNormalized(e.clientX, e.clientY);
+    const dx = nx - drag.startNX;
+    const dy = ny - drag.startNY;
+    const s = drag.startZone;
+    let z = { ...s };
+
+    switch (drag.handle) {
+      case "move": z.x = s.x + dx; z.y = s.y + dy; break;
+      case "tl":   z.x = s.x + dx; z.y = s.y + dy; z.width = s.width - dx; z.height = s.height - dy; break;
+      case "tr":                    z.y = s.y + dy; z.width = s.width + dx; z.height = s.height - dy; break;
+      case "bl":   z.x = s.x + dx;                  z.width = s.width - dx; z.height = s.height + dy; break;
+      case "br":                                     z.width = s.width + dx; z.height = s.height + dy; break;
+    }
+
+    onSafeZoneChange(clampSafeZone(z));
+  }, [onSafeZoneChange, toNormalized]);
+
+  const handlePointerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  // ── Canvas drawing loop ───────────────────────────────────────────────────────
   useEffect(() => {
     function draw() {
       const canvas = canvasRef.current;
@@ -67,6 +169,9 @@ export default function PoseCamera({
 
       const W = canvas.width;
       const H = canvas.height;
+      const sz = safeZoneRef.current;
+      const inEdit = editModeRef.current;
+      const inZone = insideSafeZoneRef.current;
 
       // 1. Draw mirrored video frame
       ctx.save();
@@ -76,24 +181,54 @@ export default function PoseCamera({
       ctx.restore();
 
       // 2. Draw safe zone rectangle
-      const szX = safeZone.x * W;
-      const szY = safeZone.y * H;
-      const szW = safeZone.width * W;
-      const szH = safeZone.height * H;
-      ctx.fillStyle = SAFE_ZONE_COLOR;
+      const szX = sz.x * W;
+      const szY = sz.y * H;
+      const szW = sz.width * W;
+      const szH = sz.height * H;
+
+      ctx.fillStyle = inEdit
+        ? "rgba(34, 197, 94, 0.12)"
+        : SAFE_ZONE_COLOR;
       ctx.fillRect(szX, szY, szW, szH);
-      ctx.strokeStyle = SAFE_ZONE_BORDER;
-      ctx.lineWidth = 2;
+
+      ctx.strokeStyle = inEdit ? SAFE_ZONE_EDIT_BORDER : SAFE_ZONE_BORDER;
+      ctx.lineWidth = inEdit ? 2.5 : 2;
       ctx.setLineDash([8, 4]);
       ctx.strokeRect(szX, szY, szW, szH);
       ctx.setLineDash([]);
 
       // Safe zone label
-      ctx.fillStyle = SAFE_ZONE_BORDER;
+      ctx.fillStyle = inEdit ? SAFE_ZONE_EDIT_BORDER : SAFE_ZONE_BORDER;
       ctx.font = "bold 11px monospace";
-      ctx.fillText("SAFE ZONE", szX + 6, szY + 14);
+      if (inEdit) {
+        ctx.fillText("SAFE ZONE — drag corners or box to adjust", szX + 6, szY + 14);
+      } else if (!inZone) {
+        ctx.fillStyle = "rgba(234, 179, 8, 0.9)";
+        ctx.fillText("Outside zone…", szX + 6, szY + 14);
+      } else {
+        ctx.fillText("SAFE ZONE", szX + 6, szY + 14);
+      }
 
-      // 3. Draw skeleton if landmarks are available
+      // 3. Draw corner handles in edit mode
+      if (inEdit) {
+        const corners = [
+          { cx: sz.x * W,              cy: sz.y * H,              cursor: "nw" },
+          { cx: (sz.x + sz.width) * W, cy: sz.y * H,              cursor: "ne" },
+          { cx: sz.x * W,              cy: (sz.y + sz.height) * H, cursor: "sw" },
+          { cx: (sz.x + sz.width) * W, cy: (sz.y + sz.height) * H, cursor: "se" },
+        ];
+        const half = HANDLE_SIZE / 2;
+        ctx.setLineDash([]);
+        for (const h of corners) {
+          ctx.fillStyle = "white";
+          ctx.fillRect(h.cx - half, h.cy - half, HANDLE_SIZE, HANDLE_SIZE);
+          ctx.strokeStyle = SAFE_ZONE_EDIT_BORDER;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(h.cx - half, h.cy - half, HANDLE_SIZE, HANDLE_SIZE);
+        }
+      }
+
+      // 4. Draw skeleton if landmarks are available
       if (landmarks && landmarks.length > 0) {
         // Mirror landmark X coordinates to match the flipped video
         const mirrorX = (x: number) => 1 - x;
@@ -102,11 +237,11 @@ export default function PoseCamera({
         ctx.strokeStyle = SKELETON_COLOR;
         ctx.lineWidth = 2.5;
         ctx.lineCap = "round";
+        ctx.setLineDash([]);
         for (const [a, b] of POSE_CONNECTIONS) {
           const lmA = landmarks[a];
           const lmB = landmarks[b];
           if (!lmA || !lmB) continue;
-          // Skip low-visibility landmarks
           if (
             (lmA.visibility !== undefined && lmA.visibility < 0.3) ||
             (lmB.visibility !== undefined && lmB.visibility < 0.3)
@@ -133,7 +268,7 @@ export default function PoseCamera({
         }
       }
 
-      // 4. Severity status chip (top-left)
+      // 5. Severity status chip (top-left)
       const chipColor = SEVERITY_COLORS[severity];
       const chipLabel = severity.toUpperCase();
       ctx.fillStyle = "rgba(0,0,0,0.65)";
@@ -149,9 +284,12 @@ export default function PoseCamera({
 
     drawingRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(drawingRef.current);
-  }, [landmarks, safeZone, severity, videoRef, canvasRef]);
+    // landmarks/safeZone/severity are read via refs so this effect only needs
+    // to restart when the canvas/video refs change (which never happens).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landmarks, safeZone, severity, editMode, insideSafeZone, videoRef, canvasRef]);
 
-  // ─── Status overlay messages ───────────────────────────────────────────────
+  // ── Status overlay messages ────────────────────────────────────────────────
   const overlayContent = (() => {
     if (status === "loading") {
       return (
@@ -193,11 +331,19 @@ export default function PoseCamera({
         autoPlay
       />
 
-      {/* Canvas — shows mirrored video + skeleton overlay */}
+      {/* Canvas — shows mirrored video + skeleton overlay + safe zone handles */}
       <canvas
         ref={canvasRef}
         className="w-full h-auto block"
-        style={{ aspectRatio: "4/3", background: "#111827" }}
+        style={{
+          aspectRatio: "4/3",
+          background: "#111827",
+          cursor: editMode ? "crosshair" : "default",
+        }}
+        onPointerDown={editMode ? handlePointerDown : undefined}
+        onPointerMove={editMode ? handlePointerMove : undefined}
+        onPointerUp={editMode ? handlePointerUp : undefined}
+        onPointerLeave={editMode ? handlePointerUp : undefined}
       />
 
       {/* Status overlay (loading / error) */}
@@ -213,6 +359,12 @@ export default function PoseCamera({
           <div className="w-3 h-0.5 bg-green-500 border-dashed" />
           <span>Safe Zone</span>
         </div>
+        {editMode && (
+          <div className="flex items-center gap-1.5 text-green-300">
+            <span>✎</span>
+            <span>Editing</span>
+          </div>
+        )}
       </div>
     </div>
   );

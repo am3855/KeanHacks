@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { MOCK_RESIDENTS } from "@/lib/mockData";
-import { DEFAULT_SAFE_ZONE } from "@/lib/poseHelpers";
+import { DEFAULT_SAFE_ZONE, clampSafeZone } from "@/lib/poseHelpers";
 import { usePoseDetection } from "@/hooks/usePoseDetection";
 import { useResidentMonitor } from "@/hooks/useResidentMonitor";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -13,7 +13,30 @@ import EventTimeline from "@/components/EventTimeline";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import AIAssistant from "@/components/AIAssistant";
 import AudioMonitor from "@/components/AudioMonitor";
-import type { ResidentProfile, SafetyEvent, VideoClip } from "@/lib/types";
+import type { ResidentProfile, SafetyEvent, VideoClip, SafeZone } from "@/lib/types";
+
+// ─── Safe zone localStorage helpers ──────────────────────────────────────────
+const SAFE_ZONE_KEY = "elderwatch_safe_zone";
+
+function loadSafeZone(): SafeZone {
+  if (typeof window === "undefined") return DEFAULT_SAFE_ZONE;
+  try {
+    const stored = localStorage.getItem(SAFE_ZONE_KEY);
+    if (!stored) return DEFAULT_SAFE_ZONE;
+    const z = JSON.parse(stored) as Partial<SafeZone>;
+    if (
+      typeof z.x !== "number" || typeof z.y !== "number" ||
+      typeof z.width !== "number" || typeof z.height !== "number"
+    ) return DEFAULT_SAFE_ZONE;
+    return clampSafeZone(z as SafeZone);
+  } catch {
+    return DEFAULT_SAFE_ZONE;
+  }
+}
+
+function saveSafeZone(z: SafeZone) {
+  try { localStorage.setItem(SAFE_ZONE_KEY, JSON.stringify(z)); } catch { /* ignore */ }
+}
 
 // PoseCamera uses canvas/webcam APIs — load client-only
 const PoseCamera = dynamic(() => import("@/components/PoseCamera"), { ssr: false });
@@ -30,11 +53,25 @@ export default function Dashboard() {
   const [elevenLabsConfigured, setElevenLabsConfigured] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [seizureDetectionEnabled, setSeizureDetectionEnabled] = useState(false);
-  const micStreamRef = useRef<MediaStream | null>(null);
+  // micStream is state (not ref) so useVideoRecorder receives updated stream on re-renders
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [isSeedLoading, setIsSeedLoading] = useState(false);
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"monitor" | "history">("monitor");
+
+  // ── Safe zone state with localStorage persistence ────────────────────────────
+  const [safeZone, setSafeZone] = useState<SafeZone>(DEFAULT_SAFE_ZONE);
+  const [safeZoneEditMode, setSafeZoneEditMode] = useState(false);
+
+  // Load safe zone from localStorage after mount (avoids SSR mismatch)
+  useEffect(() => { setSafeZone(loadSafeZone()); }, []);
+
+  // Persist safe zone whenever it changes
+  useEffect(() => { saveSafeZone(safeZone); }, [safeZone]);
+
+  const handleSafeZoneChange = useCallback((z: SafeZone) => setSafeZone(clampSafeZone(z)), []);
+  const resetSafeZone = useCallback(() => setSafeZone(DEFAULT_SAFE_ZONE), []);
 
   const selectedResident = residents.find((r) => r.id === selectedResidentId) ?? residents[0];
 
@@ -45,7 +82,7 @@ export default function Dashboard() {
   const { signals, classification, timeline, injectDemoEvent } = useResidentMonitor(
     landmarks,
     selectedResident,
-    DEFAULT_SAFE_ZONE,
+    safeZone,
     { isPaused, seizureDetectionEnabled }
   );
 
@@ -57,7 +94,7 @@ export default function Dashboard() {
     stream,
     classification,
     selectedResident,
-    micStreamRef.current,
+    micStream,
     isPaused
   );
 
@@ -266,8 +303,11 @@ export default function Dashboard() {
               landmarks={landmarks}
               status={poseStatus}
               errorMessage={errorMessage}
-              safeZone={DEFAULT_SAFE_ZONE}
+              safeZone={safeZone}
               severity={classification.severity}
+              editMode={safeZoneEditMode}
+              onSafeZoneChange={handleSafeZoneChange}
+              insideSafeZone={signals.insideSafeZone}
             />
           </div>
 
@@ -289,6 +329,30 @@ export default function Dashboard() {
             </span>
           </div>
 
+          {/* Safe zone controls */}
+          <div className="flex items-center gap-3 flex-wrap bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={safeZoneEditMode}
+                onChange={(e) => setSafeZoneEditMode(e.target.checked)}
+                className="w-3.5 h-3.5 accent-green-500"
+              />
+              <span className="text-xs">
+                <span className="text-green-300 font-medium">Edit Safe Zone</span>
+              </span>
+            </label>
+            <button
+              onClick={resetSafeZone}
+              className="text-xs bg-gray-700/80 hover:bg-gray-600/80 text-gray-300 border border-gray-600 rounded px-2 py-0.5 transition-colors"
+            >
+              Reset Safe Zone
+            </button>
+            <span className="text-[10px] text-gray-600 ml-auto hidden sm:block">
+              Safe zone uses torso center, not hands/arms. Drag corners to adjust.
+            </span>
+          </div>
+
           {/* Analytics + AI + Audio Monitor in a 3-col grid on wider screens */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <AnalyticsCard mongoConnected={mongoConnected} refreshTrigger={analyticsRefreshKey} />
@@ -298,7 +362,7 @@ export default function Dashboard() {
               isPaused={isPaused}
               onCriticalAudioDetected={triggerDemo}
               onInjectDemoEvent={injectDemoEvent as (eventType: string, severity: string) => void}
-              onMicStream={(s) => { micStreamRef.current = s; }}
+              onMicStream={setMicStream}
             />
           </div>
         </div>
