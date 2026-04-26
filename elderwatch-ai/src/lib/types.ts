@@ -56,6 +56,9 @@ export interface SafetySignals {
   secondsHighMovement?: number;      // continuous seconds of sustained high movement (seizure detection)
   handsNearThroatSeconds?: number;   // continuous seconds with hands near throat area (choking)
   majorBodyMovementScore?: number;   // movement score using only torso/head landmarks (excl. wrists)
+  leftHandNearThroat?: boolean;      // left wrist/index within throat proximity this frame
+  rightHandNearThroat?: boolean;     // right wrist/index within throat proximity this frame
+  bothHandsNearThroat?: boolean;     // both hands near throat simultaneously
 }
 
 // ─── Result of applying the safety classifier ────────────────────────────────

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { MOCK_RESIDENTS } from "@/lib/mockData";
-import { DEFAULT_SAFE_ZONE, clampSafeZone } from "@/lib/poseHelpers";
+import { DEFAULT_SAFE_ZONE, clampSafeZone, DETECTION_THRESHOLDS } from "@/lib/poseHelpers";
 import { usePoseDetection } from "@/hooks/usePoseDetection";
 import { useResidentMonitor } from "@/hooks/useResidentMonitor";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -396,6 +396,56 @@ export default function Dashboard() {
                   </span>
                 </div>
 
+                {/* Vision Debug: choking detection state */}
+                <div className="bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Vision Debug — Choking Detection</span>
+                    <span className="text-[10px] text-gray-600">threshold: {DETECTION_THRESHOLDS.chokingHandDurationSeconds}s</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <DebugPill
+                      label="Left Hand"
+                      active={signals.leftHandNearThroat ?? false}
+                      activeColor="text-red-300"
+                      activeLabel="Near throat"
+                      inactiveLabel="Away"
+                    />
+                    <DebugPill
+                      label="Right Hand"
+                      active={signals.rightHandNearThroat ?? false}
+                      activeColor="text-orange-300"
+                      activeLabel="Near throat"
+                      inactiveLabel="Away"
+                    />
+                    <DebugPill
+                      label="Both Hands"
+                      active={signals.bothHandsNearThroat ?? false}
+                      activeColor="text-yellow-300"
+                      activeLabel="Both near"
+                      inactiveLabel="No"
+                    />
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-[10px] text-gray-500">Timer:</span>
+                      <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-200"
+                          style={{
+                            width: `${Math.min(100, ((signals.handsNearThroatSeconds ?? 0) / DETECTION_THRESHOLDS.chokingHandDurationSeconds) * 100)}%`,
+                            background: (signals.handsNearThroatSeconds ?? 0) >= DETECTION_THRESHOLDS.chokingHandDurationSeconds
+                              ? "#ef4444"
+                              : (signals.handsNearThroatSeconds ?? 0) > 0
+                              ? "#f97316"
+                              : "#374151",
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-gray-400 w-8 text-right">
+                        {((signals.handsNearThroatSeconds ?? 0)).toFixed(1)}s
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Analytics + AI + Audio Monitor */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                   <AnalyticsCard mongoConnected={mongoConnected} refreshTrigger={analyticsRefreshKey} />
@@ -535,6 +585,30 @@ function TabButton({
     >
       {label}
     </button>
+  );
+}
+
+function DebugPill({
+  label,
+  active,
+  activeColor,
+  activeLabel,
+  inactiveLabel,
+}: {
+  label: string;
+  active: boolean;
+  activeColor: string;
+  activeLabel: string;
+  inactiveLabel: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-red-400 animate-pulse" : "bg-gray-600"}`} />
+      <span className="text-[10px] text-gray-500">{label}:</span>
+      <span className={`text-[10px] font-medium ${active ? activeColor : "text-gray-600"}`}>
+        {active ? activeLabel : inactiveLabel}
+      </span>
+    </div>
   );
 }
 

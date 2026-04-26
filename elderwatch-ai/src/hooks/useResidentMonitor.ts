@@ -8,7 +8,7 @@ import {
   calculateMajorBodyMovementScore,
   isInsideSafeZone,
   isPoseVisible,
-  detectHandsNearThroat,
+  detectHandsNearThroatDetails,
   DEFAULT_SAFE_ZONE,
   DETECTION_THRESHOLDS,
 } from "@/lib/poseHelpers";
@@ -118,6 +118,9 @@ export function useResidentMonitor(
     let secondsOutsideSafeZone = 0;
     let secondsHighMovement = 0;
     let handsNearThroatSeconds = 0;
+    let leftHandNearThroat = false;
+    let rightHandNearThroat = false;
+    let bothHandsNearThroat = false;
 
     if (visible && landmarks) {
       postureAngle = calculatePostureAngle(landmarks);
@@ -160,8 +163,11 @@ export function useResidentMonitor(
       }
 
       // Track hands near throat (for choking detection)
-      const handsNearThroat = detectHandsNearThroat(landmarks);
-      if (handsNearThroat) {
+      const chokingResult = detectHandsNearThroatDetails(landmarks);
+      leftHandNearThroat = chokingResult.leftHandNearThroat;
+      rightHandNearThroat = chokingResult.rightHandNearThroat;
+      bothHandsNearThroat = chokingResult.bothHandsNearThroat;
+      if (chokingResult.detected) {
         if (handsNearThroatSinceRef.current === null) handsNearThroatSinceRef.current = now;
         handsNearThroatSeconds = (now - handsNearThroatSinceRef.current) / 1000;
       } else {
@@ -186,6 +192,9 @@ export function useResidentMonitor(
       secondsHighMovement,
       handsNearThroatSeconds,
       majorBodyMovementScore,
+      leftHandNearThroat,
+      rightHandNearThroat,
+      bothHandsNearThroat,
     };
 
     const classification = classifyResidentSafety(signals, {
@@ -316,9 +325,10 @@ function persistEvent(
   classification: SafetyClassification,
   signals: SafetySignals
 ) {
-  // Strip the runtime-only timing fields before persisting (they're undefined anyway)
-  const { secondsOutsideSafeZone, secondsHighMovement, handsNearThroatSeconds, majorBodyMovementScore, ...coreSignals } = signals;
+  // Strip the runtime-only timing/debug fields before persisting
+  const { secondsOutsideSafeZone, secondsHighMovement, handsNearThroatSeconds, majorBodyMovementScore, leftHandNearThroat, rightHandNearThroat, bothHandsNearThroat, ...coreSignals } = signals;
   void secondsOutsideSafeZone; void secondsHighMovement; void handsNearThroatSeconds; void majorBodyMovementScore;
+  void leftHandNearThroat; void rightHandNearThroat; void bothHandsNearThroat;
 
   fetch("/api/events", {
     method: "POST",

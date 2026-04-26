@@ -17,6 +17,8 @@ export const LM = {
   RIGHT_ELBOW: 14,
   LEFT_WRIST: 15,
   RIGHT_WRIST: 16,
+  LEFT_INDEX: 19,
+  RIGHT_INDEX: 20,
   LEFT_HIP: 23,
   RIGHT_HIP: 24,
   LEFT_KNEE: 25,
@@ -40,7 +42,7 @@ export const DETECTION_THRESHOLDS = {
   wanderingCooldownMs: 60_000,
 
   // Choking: hands near throat must be sustained this long before flagging
-  chokingHandDurationSeconds: 4,
+  chokingHandDurationSeconds: 2,
   chokingCooldownMs: 120_000,
 
   // Safe zone: expand inward tolerance so transient boundary touches don't trigger
@@ -212,31 +214,72 @@ export function isInsideSafeZone(landmarks: PoseLandmark[], zone: SafeZone): boo
   );
 }
 
-// ─── Detect if hands are near the throat/neck area ───────────────────────────
-// Throat is approximated as the midpoint between nose and shoulder midpoint.
-// Returns true if at least one wrist is within HAND_THROAT_DIST of the throat.
-export function detectHandsNearThroat(landmarks: PoseLandmark[]): boolean {
+// ─── Per-hand choking detection result ───────────────────────────────────────
+export interface ChokingDetectionResult {
+  detected: boolean;
+  leftHandNearThroat: boolean;
+  rightHandNearThroat: boolean;
+  bothHandsNearThroat: boolean;
+  throatX: number;
+  throatY: number;
+}
+
+// ─── Detect if hands are near the throat/neck area (detailed) ────────────────
+// Throat approximated as 65% of the way from shoulder midpoint toward nose,
+// landing near the lower neck. Checks wrists and index finger tips.
+// Landmark visibility is respected — low-visibility landmarks are ignored.
+export function detectHandsNearThroatDetails(landmarks: PoseLandmark[]): ChokingDetectionResult {
+  const fallback: ChokingDetectionResult = {
+    detected: false,
+    leftHandNearThroat: false,
+    rightHandNearThroat: false,
+    bothHandsNearThroat: false,
+    throatX: 0.5,
+    throatY: 0.3,
+  };
+
   const nose = landmarks[LM.NOSE];
   const lShoulder = landmarks[LM.LEFT_SHOULDER];
   const rShoulder = landmarks[LM.RIGHT_SHOULDER];
-  const lWrist = landmarks[LM.LEFT_WRIST];
-  const rWrist = landmarks[LM.RIGHT_WRIST];
 
-  if (!nose || !lShoulder || !rShoulder) return false;
+  if (!nose || !lShoulder || !rShoulder) return fallback;
+  if (nose.visibility !== undefined && nose.visibility < 0.3) return fallback;
 
   const shoulderMidX = (lShoulder.x + rShoulder.x) / 2;
   const shoulderMidY = (lShoulder.y + rShoulder.y) / 2;
-  const throatX = (nose.x + shoulderMidX) / 2;
-  const throatY = (nose.y + shoulderMidY) / 2;
+  // 65% of the way from shoulders toward nose → lower neck / throat area
+  const throatX = shoulderMidX + 0.65 * (nose.x - shoulderMidX);
+  const throatY = shoulderMidY + 0.65 * (nose.y - shoulderMidY);
 
-  const HAND_THROAT_DIST = 0.12; // normalized units
+  const HAND_THROAT_DIST = 0.16;
 
   const dist = (lm: PoseLandmark) =>
     Math.sqrt((lm.x - throatX) ** 2 + (lm.y - throatY) ** 2);
 
-  return (lWrist && dist(lWrist) < HAND_THROAT_DIST) ||
-    (rWrist && dist(rWrist) < HAND_THROAT_DIST) ||
-    false;
+  const visible = (lm: PoseLandmark | undefined): lm is PoseLandmark =>
+    !!lm && (lm.visibility === undefined || lm.visibility > 0.3);
+
+  const lWrist = landmarks[LM.LEFT_WRIST];
+  const rWrist = landmarks[LM.RIGHT_WRIST];
+  const lIndex = landmarks[LM.LEFT_INDEX];
+  const rIndex = landmarks[LM.RIGHT_INDEX];
+
+  const leftHandNearThroat =
+    (visible(lWrist) && dist(lWrist) < HAND_THROAT_DIST) ||
+    (visible(lIndex) && dist(lIndex) < HAND_THROAT_DIST);
+  const rightHandNearThroat =
+    (visible(rWrist) && dist(rWrist) < HAND_THROAT_DIST) ||
+    (visible(rIndex) && dist(rIndex) < HAND_THROAT_DIST);
+
+  const detected = leftHandNearThroat || rightHandNearThroat;
+  const bothHandsNearThroat = leftHandNearThroat && rightHandNearThroat;
+
+  return { detected, leftHandNearThroat, rightHandNearThroat, bothHandsNearThroat, throatX, throatY };
+}
+
+// ─── Backward-compatible wrapper ─────────────────────────────────────────────
+export function detectHandsNearThroat(landmarks: PoseLandmark[]): boolean {
+  return detectHandsNearThroatDetails(landmarks).detected;
 }
 
 // ─── Check that at least the core landmarks are visible ──────────────────────

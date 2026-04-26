@@ -70,7 +70,7 @@ export function classifyResidentSafety(
       severity: ResidentStatus.URGENT,
       eventType: EventType.POSSIBLE_CHOKING,
       reason: `Possible choking indicator — sustained hands near throat/mouth area for ${Math.round(signals.handsNearThroatSeconds)}s. Caregiver should check immediately.`,
-      confidence: 0.82,
+      confidence: signals.bothHandsNearThroat ? 0.9 : 0.82,
     };
   }
 
