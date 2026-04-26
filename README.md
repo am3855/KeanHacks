@@ -1,8 +1,6 @@
 # Sensara — AI-Powered Elder Care Monitoring
 Real-time visual and audio safety monitoring for elderly care homes.
 
-
-
 ## The Problem
 Care facilities are chronically understaffed. Caregivers are stretched thin across dozens of residents with different mobility limitations and fall-risk profiles. When a resident falls, wanders, or begins choking — they may not be able to reach a call button. Continuous manual surveillance is not feasible.
 
@@ -27,6 +25,8 @@ Sensara runs MediaPipe pose detection entirely in the browser, extracting 33 bod
 | Audio distress | ElevenLabs transcribes mic; distress keywords trigger Urgent/Assist |
 | Out of frame | Key landmarks not visible → Watch |
 
+## Audio Distress Detection (ElevenLabs)
+Sensara captures microphone input in 6-second chunks via the MediaRecorder API and sends each chunk to ElevenLabs `scribe_v2` for transcription and non-speech audio event detection. The resulting transcript is scanned for distress keywords (e.g. "help", "fall", "pain") and classified into a severity level — triggering an Urgent or Assist alert the same way visual pose detection would. If no API key is set, audio monitoring is disabled gracefully.
 
 ## Tech Stack
 | Layer | Technology |
