@@ -1,7 +1,7 @@
 # Sensara — AI-Powered Elder Care Monitoring
 Real-time visual and audio safety monitoring for elderly care homes.
 
-Built at KeanHacks. Prototype only — not a medical device. All resident data is mock/demo data.
+
 
 ## The Problem
 Care facilities are chronically understaffed. Caregivers are stretched thin across dozens of residents with different mobility limitations and fall-risk profiles. When a resident falls, wanders, or begins choking — they may not be able to reach a call button. Continuous manual surveillance is not feasible.
@@ -27,13 +27,6 @@ Sensara runs MediaPipe pose detection entirely in the browser, extracting 33 bod
 | Audio distress | ElevenLabs transcribes mic; distress keywords trigger Urgent/Assist |
 | Out of frame | Key landmarks not visible → Watch |
 
-## Alerts & Notifications
-| Channel | Trigger | Cooldown |
-|---|---|---|
-| Browser TTS | Any severity change | 15 seconds |
-| SMS (Twilio) | Urgent events only | 2 min per resident + event type |
-| Email (Resend) | Urgent events only | 2 min per resident + event type |
-| S3 Video Clip | Urgent events only | 2 min per event type |
 
 ## Tech Stack
 | Layer | Technology |
