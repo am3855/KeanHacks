@@ -59,7 +59,7 @@ function getScriptedStatus(feedId: string, currentTime: number): DemoFeedStatus 
     case "feed2": // stable-demo.mp4
       return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
     case "feed3": // wandering-demo.mp4
-      if (currentTime < 6) return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
+      if (currentTime < 13) return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
       return { severity: "watch", eventType: "wandering", reason: "Resident's torso center has been outside the designated safe area", confidence: 0.78 };
     case "feed4": // choking-demo.mp4
       if (currentTime < 4) return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
