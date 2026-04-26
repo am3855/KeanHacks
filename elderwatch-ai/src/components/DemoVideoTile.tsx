@@ -1,0 +1,236 @@
+"use client";
+
+import { useRef, useState, useEffect, useCallback } from "react";
+import SafetyBadge from "./SafetyBadge";
+
+export interface DemoFeedConfig {
+  id: string;
+  room: string;
+  resident: string;
+  residentId: string;
+  risk: string;
+  videoFile: string;
+}
+
+export interface DemoFeedStatus {
+  severity: "stable" | "watch" | "assist" | "urgent";
+  eventType: string;
+  reason: string;
+  confidence: number;
+}
+
+interface DemoVideoTileProps {
+  config: DemoFeedConfig;
+  onStatusChange?: (feedId: string, status: DemoFeedStatus) => void;
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  normal: "Normal",
+  possible_fall: "Possible Fall",
+  fall_risk: "Fall Risk",
+  wandering: "Wandering",
+  possible_choking: "Possible Choking",
+  unsafe_posture: "Unsafe Posture",
+  immobility: "Immobility",
+  audio_distress: "Audio Distress",
+  possible_distress_sound: "Distress Sound",
+};
+
+const SEVERITY_BORDER: Record<string, string> = {
+  stable: "border-gray-700",
+  watch: "border-yellow-500 shadow-yellow-500/20 shadow-lg",
+  assist: "border-orange-500 shadow-orange-500/30 shadow-xl",
+  urgent: "border-red-500 shadow-red-500/40 shadow-2xl",
+};
+
+const SEVERITY_HEADER_BG: Record<string, string> = {
+  stable: "bg-gray-800",
+  watch: "bg-yellow-950/40",
+  assist: "bg-orange-950/40",
+  urgent: "bg-red-950/50",
+};
+
+function getScriptedStatus(feedId: string, currentTime: number): DemoFeedStatus {
+  switch (feedId) {
+    case "feed1": // fall-demo.mp4
+      if (currentTime < 5) return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
+      if (currentTime < 10) return { severity: "watch", eventType: "unsafe_posture", reason: "Resident posture is worth monitoring", confidence: 0.72 };
+      return { severity: "urgent", eventType: "possible_fall", reason: "Resident appears to be lying down with minimal movement — caregiver should check", confidence: 0.90 };
+    case "feed2": // stable-demo.mp4
+      return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
+    case "feed3": // wandering-demo.mp4
+      if (currentTime < 6) return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
+      return { severity: "watch", eventType: "wandering", reason: "Resident's torso center has been outside the designated safe area", confidence: 0.78 };
+    case "feed4": // choking-demo.mp4
+      if (currentTime < 4) return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
+      return { severity: "urgent", eventType: "possible_choking", reason: "Possible choking gesture detected — caregiver should check immediately", confidence: 0.82 };
+    default:
+      return { severity: "stable", eventType: "normal", reason: "No concerning activity detected", confidence: 0.95 };
+  }
+}
+
+export default function DemoVideoTile({ config, onStatusChange }: DemoVideoTileProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentStatus, setCurrentStatus] = useState<DemoFeedStatus>({
+    severity: "stable",
+    eventType: "normal",
+    reason: "No concerning activity detected",
+    confidence: 0.95,
+  });
+  const [videoError, setVideoError] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  const onStatusChangeRef = useRef(onStatusChange);
+  useEffect(() => { onStatusChangeRef.current = onStatusChange; }, [onStatusChange]);
+
+  // Update scripted status on each video timeupdate
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      const newStatus = getScriptedStatus(config.id, video.currentTime);
+      setCurrentStatus(prev => {
+        if (prev.severity !== newStatus.severity || prev.eventType !== newStatus.eventType) {
+          onStatusChangeRef.current?.(config.id, newStatus);
+          return newStatus;
+        }
+        return prev;
+      });
+    };
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    return () => video.removeEventListener("timeupdate", handleTimeUpdate);
+  }, [config.id]);
+
+  const handleSaveDemoEvent = useCallback(async () => {
+    if (currentStatus.severity === "stable") {
+      setSaveMsg("No active alert");
+      setTimeout(() => setSaveMsg(null), 2500);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "multi_feed_demo",
+          residentId: config.residentId,
+          residentName: config.resident,
+          room: config.room,
+          severity: currentStatus.severity,
+          eventType: currentStatus.eventType,
+          confidence: currentStatus.confidence,
+          reason: currentStatus.reason,
+          acknowledged: false,
+        }),
+      });
+      setSaveMsg(res.ok ? "Saved" : "Failed");
+    } catch {
+      setSaveMsg("Failed");
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveMsg(null), 3000);
+    }
+  }, [config, currentStatus]);
+
+  const urgentColor = "#ef4444";
+  const watchColor = "#eab308";
+  const assistColor = "#f97316";
+  const activeColor = currentStatus.severity === "urgent" ? urgentColor : currentStatus.severity === "assist" ? assistColor : watchColor;
+
+  return (
+    <div className={`rounded-xl overflow-hidden border-2 transition-all duration-500 ${SEVERITY_BORDER[currentStatus.severity]}`}>
+      {/* Tile header */}
+      <div className={`px-3 py-2 flex items-center justify-between gap-2 transition-colors duration-500 ${SEVERITY_HEADER_BG[currentStatus.severity]}`}>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <SafetyBadge severity={currentStatus.severity} size="sm" pulse={currentStatus.severity !== "stable"} />
+            <span className="text-white text-xs font-semibold">{config.room}</span>
+            <span className="text-[9px] text-gray-400 bg-gray-700/60 border border-gray-600/40 rounded px-1.5 py-0.5 shrink-0">
+              SIMULATED FEED
+            </span>
+          </div>
+          <p className="text-gray-400 text-[11px] mt-0.5 truncate">{config.resident} · {config.risk}</p>
+        </div>
+        {currentStatus.severity !== "stable" && (
+          <div className="shrink-0 text-right">
+            <p className="text-[10px] font-semibold" style={{ color: activeColor }}>
+              {EVENT_LABELS[currentStatus.eventType] ?? currentStatus.eventType}
+            </p>
+            <p className="text-[9px] text-gray-500">{Math.round(currentStatus.confidence * 100)}% conf.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Video */}
+      <div className="relative bg-gray-900" style={{ aspectRatio: "16/9" }}>
+        {!videoError ? (
+          <video
+            ref={videoRef}
+            src={`/demo-videos/${config.videoFile}`}
+            autoPlay
+            muted
+            loop
+            playsInline
+            onError={() => setVideoError(true)}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-center px-4 gap-2">
+            <svg className="w-10 h-10 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.893L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+            </svg>
+            <div>
+              <p className="text-gray-400 text-xs font-medium">Demo video missing</p>
+              <p className="text-gray-600 text-[10px] mt-1">Add file to:</p>
+              <p className="text-gray-600 text-[10px] font-mono bg-gray-800/60 rounded px-2 py-0.5 mt-1">
+                public/demo-videos/{config.videoFile}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Alert overlay */}
+        {currentStatus.severity === "urgent" && !videoError && (
+          <div className="absolute top-2 left-2 right-2 bg-red-950/85 border border-red-700/70 rounded-lg px-2.5 py-1.5">
+            <p className="text-red-300 text-[10px] font-bold">
+              ⚠ {EVENT_LABELS[currentStatus.eventType] ?? "URGENT"}
+            </p>
+            <p className="text-red-200/75 text-[9px] mt-0.5 line-clamp-2">{currentStatus.reason}</p>
+          </div>
+        )}
+        {currentStatus.severity === "watch" && !videoError && (
+          <div className="absolute top-2 left-2 bg-yellow-950/85 border border-yellow-700/70 rounded-lg px-2 py-1">
+            <p className="text-yellow-300 text-[10px] font-medium">
+              ● {EVENT_LABELS[currentStatus.eventType] ?? "WATCH"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-3 py-2 bg-gray-800/80 flex items-center justify-between gap-2">
+        <p className="text-[10px] text-gray-500 truncate flex-1 min-w-0">
+          {currentStatus.severity !== "stable" ? currentStatus.reason : "Monitoring…"}
+        </p>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {saveMsg && (
+            <span className={`text-[10px] ${saveMsg === "Saved" ? "text-green-400" : "text-gray-400"}`}>
+              {saveMsg}
+            </span>
+          )}
+          <button
+            onClick={handleSaveDemoEvent}
+            disabled={isSaving || currentStatus.severity === "stable"}
+            className="text-[10px] bg-blue-900/60 hover:bg-blue-800/70 disabled:opacity-40 disabled:cursor-not-allowed text-blue-200 border border-blue-800/50 rounded px-2 py-1 transition-colors whitespace-nowrap"
+          >
+            {isSaving ? "Saving…" : "Save Event"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -40,7 +40,7 @@ export const DETECTION_THRESHOLDS = {
   wanderingCooldownMs: 60_000,
 
   // Choking: hands near throat must be sustained this long before flagging
-  chokingHandDurationSeconds: 3,
+  chokingHandDurationSeconds: 4,
   chokingCooldownMs: 120_000,
 
   // Safe zone: expand inward tolerance so transient boundary touches don't trigger

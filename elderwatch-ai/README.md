@@ -42,15 +42,71 @@ The system:
 
 ---
 
+## Two-Tab Layout
+
+The app opens to **Multi-Feed Demo** by default. Switch tabs in the header.
+
+### Tab 1 — Multi-Feed Demo
+
+Simulated four-camera care-home command center using prerecorded video files. Demonstrates how
+ElderWatch AI scales to multiple residents and rooms simultaneously.
+
+- **2×2 video grid**: Four prerecorded feeds with room name, resident name, risk profile, status badge
+- **Scripted event timelines**: Each video's status updates based on `video.currentTime` — feeds
+  progress from Stable → Watch → Urgent on scripted cues
+- **Facility Alert Panel**: Live sorted alert queue (Urgent first) with wait timer, Mark Care, and
+  Save to History buttons
+- **Manual saves only**: The Multi-Feed tab does **not** automatically write to MongoDB or S3.
+  Use "Save Event" per tile or "Save All Alerts" to persist selected events.
+- **Missing video placeholder**: If demo videos are missing, each tile shows an instruction
+  card — the app does not crash.
+
+#### Demo video files
+
+Create the folder `public/demo-videos/` and add:
+
+| File | Feed | Scripted events |
+|---|---|---|
+| `fall-demo.mp4` | Room 204 — Eleanor Brooks | 0–5s stable → 5–10s watch (posture) → 10s+ urgent fall |
+| `stable-demo.mp4` | Room 118 — Robert Hayes | Always stable |
+| `wandering-demo.mp4` | Room 312 — Margaret Chen | 0–6s stable → 6s+ watch (wandering) |
+| `choking-demo.mp4` | Lounge Area — Daniel Price | 0–4s stable → 4s+ urgent choking |
+
+> Any short MP4 clip can be used as a placeholder. The scripted status is driven by
+> `video.currentTime`, not the actual video content.
+
+### Tab 2 — Live Camera Demo
+
+Full real-time webcam demo with all existing functionality preserved:
+
+- Live webcam feed with MediaPipe pose skeleton overlay
+- Draggable/resizable safe zone
+- Resident profile card + live event timeline
+- History tab with video clip playback
+- Analytics card (MongoDB 24h stats)
+- AI care assistant
+- Audio monitor (ElevenLabs STT)
+- Trigger Critical Event button
+- **Simulate Choking Event** button
+- S3 combined audio+video clip recording for all critical events
+- Pause/Resume monitoring
+
+---
+
 ## Key Features
 
 | Feature | Status |
 |---|---|
+| Multi-Feed Demo: 4-room command center with prerecorded videos | ✅ MVP |
+| Multi-Feed: scripted status timelines per feed | ✅ MVP |
+| Multi-Feed: facility alert panel (sorted by severity) | ✅ MVP |
+| Multi-Feed: manual-only MongoDB saves (no auto-spam) | ✅ MVP |
 | Live webcam feed with pose skeleton overlay | ✅ MVP |
 | Real-time fall detection | ✅ MVP |
 | Immobility detection (>5 min stillness) | ✅ MVP |
-| Wandering detection (safe zone exit, 3s debounce) | ✅ MVP |
+| Wandering detection (safe zone exit, 3s debounce, torso center) | ✅ MVP |
 | Unsafe posture detection | ✅ MVP |
+| Draggable/resizable safe zone (canvas handles, localStorage persist) | ✅ MVP |
 | Caregiver dashboard with status badge | ✅ MVP |
 | Event timeline with timestamps | ✅ MVP |
 | Browser TTS audio alerts | ✅ MVP |
@@ -61,15 +117,15 @@ The system:
 | AI Care Assistant (mock + Claude) | ✅ MVP |
 | Resident profile selector | ✅ MVP |
 | Demo data seed button | ✅ MVP |
-| S3 critical-event video clip recording (urgent only, 2 min cooldown) | ✅ MVP |
+| S3 combined audio+video `.webm` clip recording (all critical events) | ✅ MVP |
 | Presigned URL upload (browser → S3 direct) | ✅ MVP |
 | Presigned URL playback (temporary signed GET) | ✅ MVP |
 | Video clip history tab with "View Clip" | ✅ MVP |
 | "Trigger Critical Event" demo button | ✅ MVP |
+| "Simulate Choking Event" demo button | ✅ MVP |
 | Seizure-like movement detection (experimental, conservative, off by default) | ✅ MVP |
 | ElevenLabs audio monitoring (STT + distress classification) | ✅ MVP |
-| Audio-based choking / breathing distress detection | ✅ MVP |
-| Vision-based choking detection (hands near throat heuristic) | ✅ MVP |
+| Visual-only choking detection (sustained 4s hands-near-throat, no audio required) | ✅ MVP |
 | Pause Monitoring (stops all detection, classification, and S3 uploads) | ✅ MVP |
 
 ---
@@ -369,18 +425,19 @@ All visual detection is **rule-based** using pose landmarks — no custom ML tra
 
 ### Audio Classification (`src/lib/elevenlabs.ts`)
 
-When ElevenLabs is configured, each 6-second audio chunk is transcribed and classified:
+When ElevenLabs is configured, each 6-second audio chunk is transcribed and classified.
+**`possible_choking` is a visual-only event type — audio never produces it.**
 
 | Priority | Condition | Severity | Event |
 |---|---|---|---|
-| 1 | Choking keyword matched (e.g. "can't breathe", "gasping") | Urgent | possible_choking |
+| 1 | Choking/breathing-difficulty keyword (e.g. "can't breathe", "gasping") or choking sound + distress | Urgent | audio_distress |
 | 2 | ≥ 2 distress keywords **or** 1 keyword + vocal distress audio tag | Urgent | audio_distress |
-| 3 | 1 distress keyword, choking/breathing sound tag, or distress vocal tag | Assist | possible_distress_sound / possible_choking |
+| 3 | 1 distress keyword, breathing sound tag, or distress vocal tag | Assist | possible_distress_sound |
 | 4 | Fall-sound audio tag (thud, bang, crash) only | Watch | possible_fall_sound |
 | 5 | No indicators | Stable | normal |
 
 Distress keywords include: `help`, `i fell`, `can't get up`, `pain`, `emergency`, etc.  
-Choking keywords include: `choking`, `can't breathe`, `gasping`, `no air`, `struggling to breathe`, etc.
+Choking/breathing keywords include: `choking`, `can't breathe`, `gasping`, `no air`, etc. — these map to `audio_distress`, not `possible_choking`.
 
 ---
 
@@ -388,10 +445,15 @@ Choking keywords include: `choking`, `can't breathe`, `gasping`, `no air`, `stru
 
 ### Safe Zone
 
-The default safe zone covers nearly the full camera frame (x: 8%, y: 2%, width: 84%, height: 96%).
+The default safe zone covers nearly the full camera frame (x: 4%, y: 2%, width: 92%, height: 96%).
 Wandering detection uses the **torso center** (average of all available shoulder and hip landmarks)
-rather than just hips, so a seated or leaning person is accurately placed. A 6% outward margin
+rather than just hips, so a seated or leaning person is accurately placed. A 5% outward margin
 and a **3-second continuous-exit debounce** prevent momentary boundary glitches from firing alerts.
+
+**Editing the safe zone:** Toggle **Edit Safe Zone** in the Live Camera tab. Drag the four white
+corner handles to resize, or drag the interior of the box to reposition. The zone is saved to
+`localStorage` under `elderwatch_safe_zone` and persists across browser refreshes. Click
+**Reset Safe Zone** to restore the default full-frame zone.
 
 ### Seizure-Like Movement Detection
 
@@ -408,17 +470,24 @@ gesturing). The dashboard and event labels use the phrasing **"Possible Seizure-
 with the note "caregiver should check" — this system detects sustained rapid body movement and
 does not diagnose seizures.
 
-### Choking Detection
+### Choking Detection (Visual Only)
 
-Choking can be detected from two independent sources:
+`possible_choking` is a **visual-only event type**. Audio phrases alone ("I can't breathe",
+"choking") produce `audio_distress` — never `possible_choking`. This separation prevents false
+positives from normal speech.
 
-**Audio (ElevenLabs):** Keywords like "choking", "can't breathe", "gasping", "no air" in
-transcribed speech trigger an **Urgent** alert immediately. Breathing-sound tags (coughing,
-wheezing, gasping) without keywords trigger an **Assist** alert.
+**Vision (pose):** If one or both wrists are within ~12% normalized units of the throat landmark
+(interpolated midpoint between nose and shoulder midpoint, weighted 65% toward shoulders) and
+that condition persists **continuously for ≥ 4 seconds** while the resident is not lying flat,
+an **Urgent** `possible_choking` event fires with confidence 0.82. A 120-second cooldown prevents
+repeat events.
 
-**Vision (pose):** If both wrists are within ~12% of normalized frame width of the throat
-landmark (midpoint between nose and shoulder midpoint) **continuously for ≥ 3 seconds** and
-the resident is not lying flat, an **Urgent** choking alert fires.
+**Simulate Choking Event** button in the Live Camera tab creates an Urgent `possible_choking` event,
+uploads a combined audio+video clip to S3, and adds it to the live timeline and MongoDB — useful
+for demonstrating the detection path without needing a real gesture.
+
+The event is always labelled **"Possible Choking"** — this system does not confirm choking.
+Caregivers must check immediately.
 
 ### Pause Monitoring
 
@@ -433,12 +502,27 @@ The **Pause Monitoring** button in the dashboard header stops all activity:
 This is intended for use when a caregiver is physically present in the room and manual monitoring
 is not needed, or when the system needs to be temporarily silenced during a planned activity.
 
-### S3 Video Clip Recording
+### S3 Video Clip Recording (Combined Audio + Video)
 
-Critical-event clips are recorded **only for `urgent` severity events** (possible fall, possible
-choking, audio distress, seizure-like movement). Watch and Assist events do not trigger recording.
-A **2-minute per-event-type cooldown** prevents the same event type from generating multiple clips
-in a short window. This limits S3 storage costs and avoids clip spam during sustained alerts.
+All critical events record a **single `.webm` clip containing both video and microphone audio**
+tracks when camera and microphone permissions are available.
+
+Recording path (shared by all critical event sources):
+1. If the AudioMonitor mic stream is available, reuse it; otherwise request a fresh audio stream.
+2. Combine the webcam video track and microphone audio track into one `MediaStream`.
+3. Record with `MediaRecorder` (`video/webm;codecs=vp9,opus` when supported).
+4. Upload directly to S3 via presigned PUT URL (no server proxy).
+5. Save `video_clips` metadata to MongoDB including `hasVideoTrack` and `hasAudioTrack`.
+
+**Fallbacks:**
+- If microphone permission is denied → record video-only clip, show "Microphone unavailable — saved video-only clip."
+- If S3 is not configured → event is saved to MongoDB without a clip.
+- If camera is unavailable → skip clip recording entirely; event is still saved to MongoDB.
+
+Recording triggers: `possible_fall`, `possible_choking`, `audio_distress`, `seizure_like_motion`,
+manual Trigger Critical Event, Simulate Choking Event, simulated audio distress.
+
+A **2-minute per-event-type cooldown** prevents clip spam during sustained alerts.
 
 ### Per-Event-Type Cooldowns
 

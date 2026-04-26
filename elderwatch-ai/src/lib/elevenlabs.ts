@@ -14,7 +14,7 @@ export interface TranscribeResult {
 }
 
 export interface AudioClassification {
-  eventType: "audio_distress" | "possible_distress_sound" | "possible_fall_sound" | "possible_choking" | "normal";
+  eventType: "audio_distress" | "possible_distress_sound" | "possible_fall_sound" | "normal";
   severity: "urgent" | "assist" | "watch" | "stable";
   confidence: number;
   reason: string;
@@ -99,16 +99,17 @@ export function classifyAudioTranscript(
   );
   const matchedAudioTags = [...matchedFallTags, ...matchedDistressTags, ...matchedChokingTags];
 
-  // Urgent: choking keyword or choking sound + any distress indicator
+  // Urgent: choking/breathing-difficulty keyword or choking sound + any distress indicator.
+  // Choking as an eventType is VISUAL-ONLY; audio routes to audio_distress instead.
   if (
     matchedChokingKeywords.length >= 1 ||
     (matchedChokingTags.length >= 1 && (matchedKeywords.length >= 1 || matchedDistressTags.length >= 1))
   ) {
     return {
-      eventType: "possible_choking",
+      eventType: "audio_distress",
       severity: "urgent",
       confidence: Math.min(0.65 + matchedChokingKeywords.length * 0.1, 0.92),
-      reason: `Possible choking or breathing distress detected from audio. Caregiver should check immediately.`,
+      reason: `Verbal or audio distress detected — possible breathing difficulty. Caregiver should check immediately.`,
       matchedKeywords: [...matchedChokingKeywords, ...matchedKeywords],
       matchedAudioTags,
     };
@@ -126,14 +127,15 @@ export function classifyAudioTranscript(
     };
   }
 
-  // Assist: single distress keyword, choking sound tags, or distress sound tags
+  // Assist: single distress keyword, choking sound tags, or distress sound tags.
+  // Choking eventType is visual-only; respiratory audio events map to possible_distress_sound.
   if (matchedKeywords.length >= 1 || matchedDistressTags.length >= 1 || matchedChokingTags.length >= 1) {
-    const isChokingAudio = matchedChokingTags.length >= 1;
+    const isRespiratoryAudio = matchedChokingTags.length >= 1;
     return {
-      eventType: isChokingAudio ? "possible_choking" : "possible_distress_sound",
+      eventType: "possible_distress_sound",
       severity: "assist",
       confidence: 0.65,
-      reason: isChokingAudio
+      reason: isRespiratoryAudio
         ? `Possible respiratory distress sound detected — audio event: "${matchedChokingTags.join('", "')}"`
         : `Possible distress — keyword or vocal audio event detected`,
       matchedKeywords,

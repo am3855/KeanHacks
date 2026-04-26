@@ -13,6 +13,7 @@ import EventTimeline from "@/components/EventTimeline";
 import AnalyticsCard from "@/components/AnalyticsCard";
 import AIAssistant from "@/components/AIAssistant";
 import AudioMonitor from "@/components/AudioMonitor";
+import MultiFeedDemo from "@/components/MultiFeedDemo";
 import type { ResidentProfile, SafetyEvent, VideoClip, SafeZone } from "@/lib/types";
 
 // ─── Safe zone localStorage helpers ──────────────────────────────────────────
@@ -42,8 +43,10 @@ function saveSafeZone(z: SafeZone) {
 const PoseCamera = dynamic(() => import("@/components/PoseCamera"), { ssr: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ElderWatch AI — Main Dashboard Page
+// ElderWatch AI — Main Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
+
+type MainTab = "multi-feed" | "live-camera";
 
 export default function Dashboard() {
   const [residents] = useState<ResidentProfile[]>(MOCK_RESIDENTS);
@@ -53,21 +56,18 @@ export default function Dashboard() {
   const [elevenLabsConfigured, setElevenLabsConfigured] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [seizureDetectionEnabled, setSeizureDetectionEnabled] = useState(false);
-  // micStream is state (not ref) so useVideoRecorder receives updated stream on re-renders
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [isSeedLoading, setIsSeedLoading] = useState(false);
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"monitor" | "history">("monitor");
+  const [mainTab, setMainTab] = useState<MainTab>("multi-feed");
 
   // ── Safe zone state with localStorage persistence ────────────────────────────
   const [safeZone, setSafeZone] = useState<SafeZone>(DEFAULT_SAFE_ZONE);
   const [safeZoneEditMode, setSafeZoneEditMode] = useState(false);
 
-  // Load safe zone from localStorage after mount (avoids SSR mismatch)
   useEffect(() => { setSafeZone(loadSafeZone()); }, []);
-
-  // Persist safe zone whenever it changes
   useEffect(() => { saveSafeZone(safeZone); }, [safeZone]);
 
   const handleSafeZoneChange = useCallback((z: SafeZone) => setSafeZone(clampSafeZone(z)), []);
@@ -75,7 +75,7 @@ export default function Dashboard() {
 
   const selectedResident = residents.find((r) => r.id === selectedResidentId) ?? residents[0];
 
-  // ── Pose detection ────────────────────────────────────────────────────────
+  // ── Pose detection (always running so camera is ready on tab switch) ──────
   const { landmarks, videoRef, canvasRef, status: poseStatus, errorMessage, stream } = usePoseDetection();
 
   // ── Safety monitoring ─────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export default function Dashboard() {
   // ── TTS + visual alerts ───────────────────────────────────────────────────
   useAlerts(classification, selectedResident);
 
-  // ── Critical event video recording (with optional mic audio) ─────────────
+  // ── Critical event video recording (shared function for all triggers) ─────
   const { recordingStatus, statusMessage: recordingMessage, triggerDemo } = useVideoRecorder(
     stream,
     classification,
@@ -98,13 +98,18 @@ export default function Dashboard() {
     isPaused
   );
 
-  // ── Combined demo trigger: inject event into timeline + start recording ──
+  // ── Demo triggers ─────────────────────────────────────────────────────────
   const handleTriggerDemo = useCallback(() => {
     injectDemoEvent("possible_fall", "urgent");
     triggerDemo();
   }, [injectDemoEvent, triggerDemo]);
 
-  // ── Check MongoDB + S3 connection on mount ───────────────────────────────
+  const handleSimulateChoking = useCallback(() => {
+    injectDemoEvent("possible_choking", "urgent");
+    triggerDemo();
+  }, [injectDemoEvent, triggerDemo]);
+
+  // ── Check service status on mount ─────────────────────────────────────────
   useEffect(() => {
     fetch("/api/residents")
       .then((r) => r.json())
@@ -131,9 +136,7 @@ export default function Dashboard() {
         body: JSON.stringify({ acknowledgedBy: "Demo Caregiver" }),
       });
       setAnalyticsRefreshKey((k) => k + 1);
-    } catch {
-      // Non-fatal
-    }
+    } catch { /* non-fatal */ }
   }, []);
 
   // ── Add caregiver note ────────────────────────────────────────────────────
@@ -145,9 +148,7 @@ export default function Dashboard() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ residentId, note, createdBy: "Demo Caregiver" }),
         });
-      } catch {
-        // Non-fatal
-      }
+      } catch { /* non-fatal */ }
     },
     []
   );
@@ -179,10 +180,13 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <header className="border-b border-gray-800 bg-slate-900/80 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
+        <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
+
+          {/* Logo */}
+          <div className="flex items-center gap-3 shrink-0">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-sm font-bold">
               EW
             </div>
@@ -192,21 +196,32 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Main tab switcher */}
+          <div className="flex items-center gap-1 bg-gray-800/80 border border-gray-700 rounded-xl p-1 mx-auto">
+            <MainTabButton
+              active={mainTab === "multi-feed"}
+              onClick={() => setMainTab("multi-feed")}
+              label="Multi-Feed Demo"
+              desc="4-room command center"
+            />
+            <MainTabButton
+              active={mainTab === "live-camera"}
+              onClick={() => setMainTab("live-camera")}
+              label="Live Camera Demo"
+              desc="Webcam + pose detection"
+            />
+          </div>
+
           {/* Status indicators */}
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 flex-wrap justify-end ml-auto">
             {isPaused && (
               <span className="text-xs font-bold text-yellow-300 bg-yellow-900/60 border border-yellow-700 rounded-lg px-3 py-1.5 animate-pulse">
-                ⏸ MONITORING PAUSED
+                ⏸ PAUSED
               </span>
             )}
             <StatusPill
-              active={poseStatus === "running" && !isPaused}
-              label={isPaused ? "Paused" : poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
-              color={isPaused ? "yellow" : poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
-            />
-            <StatusPill
               active={mongoConnected}
-              label={mongoConnected ? "MongoDB Connected" : "Demo Mode"}
+              label={mongoConnected ? "MongoDB" : "No DB"}
               color={mongoConnected ? "green" : "yellow"}
             />
             <StatusPill
@@ -219,7 +234,6 @@ export default function Dashboard() {
               label={elevenLabsConfigured ? "STT Ready" : "STT Off"}
               color={elevenLabsConfigured ? "green" : "yellow"}
             />
-            {/* Pause / Resume */}
             <button
               onClick={() => setIsPaused((p) => !p)}
               className={`text-xs rounded-lg px-3 py-1.5 transition-colors border font-medium ${
@@ -228,21 +242,7 @@ export default function Dashboard() {
                   : "bg-yellow-900/70 hover:bg-yellow-800/80 text-yellow-200 border-yellow-700"
               }`}
             >
-              {isPaused ? "▶ Resume Monitoring" : "⏸ Pause Monitoring"}
-            </button>
-            <button
-              onClick={handleTriggerDemo}
-              disabled={poseStatus !== "running" || isPaused}
-              className="text-xs bg-red-900/70 hover:bg-red-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-red-200 border border-red-800/60 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              ⚡ Trigger Critical Event
-            </button>
-            <button
-              onClick={handleSeed}
-              disabled={isSeedLoading}
-              className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              {isSeedLoading ? "Seeding…" : "Seed Demo Data"}
+              {isPaused ? "▶ Resume" : "⏸ Pause"}
             </button>
           </div>
         </div>
@@ -256,14 +256,12 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* ── Seed message toast ────────────────────────────────────────────── */}
+      {/* ── Toasts (always on top, fixed position) ────────────────────────── */}
       {seedMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-green-900 text-green-200 border border-green-700 rounded-xl px-4 py-2 text-sm shadow-xl animate-fade-in">
           {seedMessage}
         </div>
       )}
-
-      {/* ── Recording status toast ────────────────────────────────────────── */}
       {recordingMessage && (
         <div className={`fixed top-20 right-4 z-50 rounded-xl px-4 py-2 text-sm shadow-xl border animate-fade-in flex items-center gap-2
           ${recordingStatus === "capturing" ? "bg-red-900 text-red-200 border-red-700" :
@@ -272,139 +270,183 @@ export default function Dashboard() {
             recordingStatus === "s3-disabled" ? "bg-yellow-900/80 text-yellow-200 border-yellow-700" :
             "bg-red-900 text-red-200 border-red-700"}`}
         >
-          {recordingStatus === "capturing" && (
-            <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-          )}
-          {recordingStatus === "uploading" && (
-            <span className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-300 rounded-full animate-spin" />
-          )}
+          {recordingStatus === "capturing" && <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
+          {recordingStatus === "uploading" && <span className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-300 rounded-full animate-spin" />}
           {recordingMessage}
         </div>
       )}
 
-      {/* ── Main content ──────────────────────────────────────────────────── */}
-      <main className="flex-1 max-w-[1400px] mx-auto w-full px-4 py-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-5">
+      {/* ── Tab content ───────────────────────────────────────────────────── */}
+      <main className="flex-1 max-w-[1400px] mx-auto w-full px-4 py-5">
 
-        {/* ── Left column: Camera + Analytics + AI ─────────────────────── */}
-        <div className="flex flex-col gap-5">
-
-          {/* Camera feed */}
-          <div className={`rounded-xl overflow-hidden transition-shadow duration-500 ${severityGlow[classification.severity]}`}>
-            <div className="flex items-center justify-between px-1 mb-2">
-              <h2 className="text-gray-300 text-sm font-medium flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                Live Feed — {selectedResident.room}
-              </h2>
-              <span className="text-xs text-gray-600">MediaPipe Pose Landmarker</span>
-            </div>
-            <PoseCamera
-              videoRef={videoRef}
-              canvasRef={canvasRef}
-              landmarks={landmarks}
-              status={poseStatus}
-              errorMessage={errorMessage}
-              safeZone={safeZone}
-              severity={classification.severity}
-              editMode={safeZoneEditMode}
-              onSafeZoneChange={handleSafeZoneChange}
-              insideSafeZone={signals.insideSafeZone}
-            />
-          </div>
-
-          {/* Experimental seizure detection toggle */}
-          <div className="flex items-center gap-2.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={seizureDetectionEnabled}
-                onChange={(e) => setSeizureDetectionEnabled(e.target.checked)}
-                className="w-3.5 h-3.5 accent-purple-500"
-              />
-              <span className="text-xs text-gray-400">
-                <span className="text-purple-300 font-medium">Experimental:</span> Seizure-like movement detection
-              </span>
-            </label>
-            <span className="text-[10px] text-gray-600 ml-auto">
-              {seizureDetectionEnabled ? "ON — requires 6s sustained motion" : "OFF (default — prevents false positives)"}
-            </span>
-          </div>
-
-          {/* Safe zone controls */}
-          <div className="flex items-center gap-3 flex-wrap bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={safeZoneEditMode}
-                onChange={(e) => setSafeZoneEditMode(e.target.checked)}
-                className="w-3.5 h-3.5 accent-green-500"
-              />
-              <span className="text-xs">
-                <span className="text-green-300 font-medium">Edit Safe Zone</span>
-              </span>
-            </label>
-            <button
-              onClick={resetSafeZone}
-              className="text-xs bg-gray-700/80 hover:bg-gray-600/80 text-gray-300 border border-gray-600 rounded px-2 py-0.5 transition-colors"
-            >
-              Reset Safe Zone
-            </button>
-            <span className="text-[10px] text-gray-600 ml-auto hidden sm:block">
-              Safe zone uses torso center, not hands/arms. Drag corners to adjust.
-            </span>
-          </div>
-
-          {/* Analytics + AI + Audio Monitor in a 3-col grid on wider screens */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            <AnalyticsCard mongoConnected={mongoConnected} refreshTrigger={analyticsRefreshKey} />
-            <AIAssistant resident={selectedResident} classification={classification} />
-            <AudioMonitor
-              resident={selectedResident}
-              isPaused={isPaused}
-              onCriticalAudioDetected={triggerDemo}
-              onInjectDemoEvent={injectDemoEvent as (eventType: string, severity: string) => void}
-              onMicStream={setMicStream}
-            />
-          </div>
+        {/* ── TAB 1: Multi-Feed Demo ──────────────────────────────────────── */}
+        <div className={mainTab === "multi-feed" ? "" : "hidden"}>
+          <MultiFeedDemo />
         </div>
 
-        {/* ── Right column: Resident panel + Timeline ───────────────────── */}
-        <div className="flex flex-col gap-4">
-
-          {/* Resident card */}
-          <ResidentCard
-            resident={selectedResident}
-            classification={classification}
-            signals={signals}
-            residents={residents}
-            onSelectResident={setSelectedResidentId}
-          />
-
-          {/* Tabs: Monitor timeline vs History */}
-          <div className="bg-gray-800 rounded-xl border border-gray-700 flex flex-col">
-            <div className="flex border-b border-gray-700">
-              <TabButton
-                active={activeTab === "monitor"}
-                onClick={() => setActiveTab("monitor")}
-                label="Live Events"
-              />
-              <TabButton
-                active={activeTab === "history"}
-                onClick={() => setActiveTab("history")}
-                label="History"
-              />
+        {/* ── TAB 2: Live Camera Demo ─────────────────────────────────────── */}
+        {/* Keep always mounted (not conditional) so videoRef/canvasRef are in the DOM and
+            usePoseDetection can complete its init even while Multi-Feed tab is active. */}
+        <div className={mainTab === "live-camera" ? "" : "hidden"}>
+          <div>
+            {/* Live Camera description */}
+            <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl px-4 py-2.5 mb-4 flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-gray-400 text-xs">
+                Live single-room demo using this device&apos;s camera and microphone with pose detection,
+                audio monitoring, MongoDB history, and S3 critical-event clip storage.
+              </p>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <StatusPill
+                  active={poseStatus === "running" && !isPaused}
+                  label={isPaused ? "Paused" : poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
+                  color={isPaused ? "yellow" : poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
+                />
+                <button
+                  onClick={handleTriggerDemo}
+                  disabled={poseStatus !== "running" || isPaused}
+                  className="text-xs bg-red-900/70 hover:bg-red-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-red-200 border border-red-800/60 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  ⚡ Trigger Critical Event
+                </button>
+                <button
+                  onClick={handleSimulateChoking}
+                  disabled={poseStatus !== "running" || isPaused}
+                  className="text-xs bg-purple-900/70 hover:bg-purple-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-purple-200 border border-purple-800/60 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  🤲 Simulate Choking
+                </button>
+                <button
+                  onClick={handleSeed}
+                  disabled={isSeedLoading}
+                  className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  {isSeedLoading ? "Seeding…" : "Seed Demo Data"}
+                </button>
+              </div>
             </div>
 
-            <div className="p-3">
-              {activeTab === "monitor" && (
-                <EventTimeline
-                  events={timeline.filter((e) => e.eventType !== "normal")}
-                  onAcknowledge={handleAcknowledge}
-                  onAddNote={handleAddNote}
+            {/* Two-column live camera layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-5">
+
+              {/* Left column: Camera + Analytics + AI + Audio */}
+              <div className="flex flex-col gap-5">
+
+                {/* Camera feed */}
+                <div className={`rounded-xl overflow-hidden transition-shadow duration-500 ${severityGlow[classification.severity]}`}>
+                  <div className="flex items-center justify-between px-1 mb-2">
+                    <h2 className="text-gray-300 text-sm font-medium flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      Live Feed — {selectedResident.room}
+                    </h2>
+                    <span className="text-xs text-gray-600">MediaPipe Pose Landmarker</span>
+                  </div>
+                  <PoseCamera
+                    videoRef={videoRef}
+                    canvasRef={canvasRef}
+                    landmarks={landmarks}
+                    status={poseStatus}
+                    errorMessage={errorMessage}
+                    safeZone={safeZone}
+                    severity={classification.severity}
+                    editMode={safeZoneEditMode}
+                    onSafeZoneChange={handleSafeZoneChange}
+                    insideSafeZone={signals.insideSafeZone}
+                  />
+                </div>
+
+                {/* Seizure detection toggle */}
+                <div className="flex items-center gap-2.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={seizureDetectionEnabled}
+                      onChange={(e) => setSeizureDetectionEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-purple-500"
+                    />
+                    <span className="text-xs text-gray-400">
+                      <span className="text-purple-300 font-medium">Experimental:</span> Seizure-like movement detection
+                    </span>
+                  </label>
+                  <span className="text-[10px] text-gray-600 ml-auto">
+                    {seizureDetectionEnabled ? "ON — requires 6s sustained motion" : "OFF (default)"}
+                  </span>
+                </div>
+
+                {/* Safe zone controls */}
+                <div className="flex items-center gap-3 flex-wrap bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={safeZoneEditMode}
+                      onChange={(e) => setSafeZoneEditMode(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-green-500"
+                    />
+                    <span className="text-xs">
+                      <span className="text-green-300 font-medium">Edit Safe Zone</span>
+                    </span>
+                  </label>
+                  <button
+                    onClick={resetSafeZone}
+                    className="text-xs bg-gray-700/80 hover:bg-gray-600/80 text-gray-300 border border-gray-600 rounded px-2 py-0.5 transition-colors"
+                  >
+                    Reset Safe Zone
+                  </button>
+                  <span className="text-[10px] text-gray-600 ml-auto hidden sm:block">
+                    Drag corners or box to resize · Uses torso center · Persists across refreshes
+                  </span>
+                </div>
+
+                {/* Analytics + AI + Audio Monitor */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <AnalyticsCard mongoConnected={mongoConnected} refreshTrigger={analyticsRefreshKey} />
+                  <AIAssistant resident={selectedResident} classification={classification} />
+                  <AudioMonitor
+                    resident={selectedResident}
+                    isPaused={isPaused}
+                    onCriticalAudioDetected={triggerDemo}
+                    onInjectDemoEvent={injectDemoEvent as (eventType: string, severity: string) => void}
+                    onMicStream={setMicStream}
+                  />
+                </div>
+              </div>
+
+              {/* Right column: Resident card + Timeline/History */}
+              <div className="flex flex-col gap-4">
+                <ResidentCard
+                  resident={selectedResident}
+                  classification={classification}
+                  signals={signals}
+                  residents={residents}
+                  onSelectResident={setSelectedResidentId}
                 />
-              )}
-              {activeTab === "history" && (
-                <ResidentHistoryPanel residentId={selectedResident.id} />
-              )}
+
+                <div className="bg-gray-800 rounded-xl border border-gray-700 flex flex-col">
+                  <div className="flex border-b border-gray-700">
+                    <TabButton
+                      active={activeTab === "monitor"}
+                      onClick={() => setActiveTab("monitor")}
+                      label="Live Events"
+                    />
+                    <TabButton
+                      active={activeTab === "history"}
+                      onClick={() => setActiveTab("history")}
+                      label="History"
+                    />
+                  </div>
+                  <div className="p-3">
+                    {activeTab === "monitor" && (
+                      <EventTimeline
+                        events={timeline.filter((e) => e.eventType !== "normal")}
+                        onAcknowledge={handleAcknowledge}
+                        onAddNote={handleAddNote}
+                      />
+                    )}
+                    {activeTab === "history" && (
+                      <ResidentHistoryPanel residentId={selectedResident.id} />
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -420,6 +462,36 @@ export default function Dashboard() {
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
+
+function MainTabButton({
+  active,
+  onClick,
+  label,
+  desc,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  desc?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center px-4 py-2 rounded-lg transition-all text-xs font-semibold ${
+        active
+          ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40"
+          : "text-gray-400 hover:text-gray-200 hover:bg-gray-700/50"
+      }`}
+    >
+      {label}
+      {desc && (
+        <span className={`text-[10px] font-normal mt-0.5 ${active ? "text-blue-200" : "text-gray-600"}`}>
+          {desc}
+        </span>
+      )}
+    </button>
+  );
+}
 
 function StatusPill({
   active,
@@ -599,6 +671,7 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
                     })}
                   </span>
                   <span className="text-gray-600 ml-1">· {clip.durationSeconds}s</span>
+                  {clip.hasAudioTrack && <span className="text-purple-400 ml-1 text-[9px]">🎙</span>}
                 </div>
                 {clip._id && (
                   <button
@@ -673,6 +746,7 @@ function ResidentHistoryPanel({ residentId }: { residentId: string }) {
               <div className="flex-1 min-w-0">
                 <span className="text-white">{EVENT_LABELS[e.eventType] ?? e.eventType}</span>
                 {e.source === "audio_monitor" && <span className="ml-1 text-purple-400 text-[10px]">🎙️</span>}
+                {e.source === "multi_feed_demo" && <span className="ml-1 text-blue-400 text-[10px]">[demo]</span>}
                 {e.hasVideoClip && <span className="ml-1 text-blue-400 text-[10px]">📹</span>}
                 <span className="text-gray-600 ml-1.5">
                   {new Date(e.createdAt).toLocaleDateString([], {

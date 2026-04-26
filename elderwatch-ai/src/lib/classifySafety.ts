@@ -59,20 +59,18 @@ export function classifyResidentSafety(
     };
   }
 
-  // 4. Possible choking — sustained hands-near-throat gesture
-  // Requires 3+ seconds of hands near throat AND abnormal posture.
-  // Vision-based only; audio route has its own choking path.
+  // 4. Possible choking — sustained hands-near-throat/mouth gesture (VISUAL ONLY).
+  // Requires 4+ seconds of hands near throat. Audio phrases alone do NOT create this event.
   if (
     signals.handsNearThroatSeconds !== undefined &&
     signals.handsNearThroatSeconds >= DETECTION_THRESHOLDS.chokingHandDurationSeconds &&
-    signals.postureAngle > 15 &&
     !signals.isLyingDown
   ) {
     return {
       severity: ResidentStatus.URGENT,
       eventType: EventType.POSSIBLE_CHOKING,
-      reason: `Possible choking gesture — hands near throat for ${Math.round(signals.handsNearThroatSeconds)}s. Caregiver should check immediately.`,
-      confidence: 0.68,
+      reason: `Possible choking indicator — sustained hands near throat/mouth area for ${Math.round(signals.handsNearThroatSeconds)}s. Caregiver should check immediately.`,
+      confidence: 0.82,
     };
   }
 
