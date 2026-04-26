@@ -37,17 +37,17 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 const SEVERITY_BORDER: Record<string, string> = {
-  stable: "border-gray-700",
+  stable: "border-sensara-border",
   watch: "border-yellow-500 shadow-yellow-500/20 shadow-lg",
   assist: "border-orange-500 shadow-orange-500/30 shadow-xl",
   urgent: "border-red-500 shadow-red-500/40 shadow-2xl",
 };
 
 const SEVERITY_HEADER_BG: Record<string, string> = {
-  stable: "bg-gray-800",
-  watch: "bg-yellow-950/40",
-  assist: "bg-orange-950/40",
-  urgent: "bg-red-950/50",
+  stable: "bg-sensara-forest-800",
+  watch: "bg-yellow-900/90",
+  assist: "bg-orange-900/90",
+  urgent: "bg-red-900/90",
 };
 
 function getScriptedStatus(feedId: string, currentTime: number): DemoFeedStatus {
@@ -212,8 +212,8 @@ export default function DemoVideoTile({ config, onStatusChange }: DemoVideoTileP
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2 bg-gray-800/80 flex items-center justify-between gap-2">
-        <p className="text-[10px] text-gray-500 truncate flex-1 min-w-0">
+      <div className="px-3 py-2 bg-sensara-forest-900/95 flex items-center justify-between gap-2">
+        <p className="text-[10px] text-sensara-forest-300 truncate flex-1 min-w-0">
           {currentStatus.severity !== "stable" ? currentStatus.reason : "Monitoring…"}
         </p>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -225,7 +225,7 @@ export default function DemoVideoTile({ config, onStatusChange }: DemoVideoTileP
           <button
             onClick={handleSaveDemoEvent}
             disabled={isSaving || currentStatus.severity === "stable"}
-            className="text-[10px] bg-blue-900/60 hover:bg-blue-800/70 disabled:opacity-40 disabled:cursor-not-allowed text-blue-200 border border-blue-800/50 rounded px-2 py-1 transition-colors whitespace-nowrap"
+            className="text-[10px] bg-sensara-forest-700 hover:bg-sensara-forest-600 disabled:opacity-40 disabled:cursor-not-allowed text-white border border-sensara-forest-500 rounded px-2 py-1 transition-colors whitespace-nowrap"
           >
             {isSaving ? "Saving…" : "Save Event"}
           </button>

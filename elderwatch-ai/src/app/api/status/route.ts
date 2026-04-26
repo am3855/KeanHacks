@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isMongoEnabled, getDb } from "@/lib/mongodb";
 import { isS3Configured } from "@/lib/s3";
+import { isSmsConfigured } from "@/lib/sms";
 
 // GET /api/status
 // Returns actual connectivity state: pings MongoDB and checks S3 env vars.
@@ -26,6 +27,7 @@ export async function GET() {
   return NextResponse.json({
     mongoConnected,
     s3Configured: isS3Configured(),
+    smsConfigured: isSmsConfigured(),
     demoMode: !isMongoEnabled(),
   });
 }

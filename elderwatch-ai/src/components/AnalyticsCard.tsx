@@ -47,16 +47,16 @@ export default function AnalyticsCard({ mongoConnected, refreshTrigger }: Analyt
   }, [fetchAnalytics]);
 
   return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 p-4">
+    <div className="bg-white rounded-xl border border-sensara-border p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+        <h3 className="text-sensara-forest-900 font-semibold text-sm flex items-center gap-2">
           <span>📊</span> Analytics (last 24h)
         </h3>
         <div className="flex items-center gap-1.5">
           <div
-            className={`w-2 h-2 rounded-full ${mongoConnected ? "bg-green-400" : "bg-yellow-400"}`}
+            className={`w-2 h-2 rounded-full ${mongoConnected ? "bg-green-500" : "bg-yellow-500"}`}
           />
-          <span className="text-[10px] text-gray-500">
+          <span className="text-[10px] text-sensara-warm-600">
             {mongoConnected ? "MongoDB" : "Demo Mode"}
           </span>
         </div>
@@ -65,7 +65,7 @@ export default function AnalyticsCard({ mongoConnected, refreshTrigger }: Analyt
       {loading ? (
         <div className="grid grid-cols-2 gap-2">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-gray-700/50 rounded-lg h-14 animate-pulse" />
+            <div key={i} className="bg-sensara-warm-100 rounded-lg h-14 animate-pulse" />
           ))}
         </div>
       ) : analytics ? (
@@ -73,18 +73,18 @@ export default function AnalyticsCard({ mongoConnected, refreshTrigger }: Analyt
           <StatTile
             label="Total Events"
             value={analytics.totalEventsLast24h}
-            color="text-blue-300"
+            color="text-sensara-forest-700"
           />
           <StatTile
             label="Urgent"
             value={analytics.urgentEventsLast24h}
-            color="text-red-300"
+            color="text-red-600"
             highlight={analytics.urgentEventsLast24h > 0}
           />
           <StatTile
             label="Assist"
             value={analytics.assistEventsLast24h}
-            color="text-orange-300"
+            color="text-orange-600"
           />
           <StatTile
             label="Top Event"
@@ -93,16 +93,16 @@ export default function AnalyticsCard({ mongoConnected, refreshTrigger }: Analyt
                 ? EVENT_LABELS[analytics.mostFrequentEventType] ?? analytics.mostFrequentEventType
                 : "—"
             }
-            color="text-purple-300"
+            color="text-sensara-forest-600"
             small
           />
           {analytics.residentWithMostAlerts && (
-            <div className="col-span-2 bg-gray-700/40 rounded-lg p-2.5">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Most Alerts</p>
-              <p className="text-white text-sm font-semibold">
+            <div className="col-span-2 bg-sensara-warm-100 border border-sensara-divider rounded-lg p-2.5">
+              <p className="text-[10px] text-sensara-warm-600 uppercase tracking-wide">Most Alerts</p>
+              <p className="text-sensara-forest-900 text-sm font-semibold">
                 {analytics.residentWithMostAlerts.name}
               </p>
-              <p className="text-gray-400 text-xs">
+              <p className="text-sensara-warm-700 text-xs">
                 {analytics.residentWithMostAlerts.room} ·{" "}
                 {analytics.residentWithMostAlerts.count} event
                 {analytics.residentWithMostAlerts.count !== 1 ? "s" : ""}
@@ -111,7 +111,7 @@ export default function AnalyticsCard({ mongoConnected, refreshTrigger }: Analyt
           )}
         </div>
       ) : (
-        <p className="text-gray-500 text-sm text-center py-4">Analytics unavailable</p>
+        <p className="text-sensara-warm-500 text-sm text-center py-4">Analytics unavailable</p>
       )}
     </div>
   );
@@ -132,9 +132,9 @@ function StatTile({
 }) {
   return (
     <div
-      className={`bg-gray-700/40 rounded-lg p-2.5 ${highlight ? "ring-1 ring-red-500/50" : ""}`}
+      className={`bg-sensara-warm-100 border border-sensara-divider rounded-lg p-2.5 ${highlight ? "ring-1 ring-red-400" : ""}`}
     >
-      <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="text-[10px] text-sensara-warm-600 uppercase tracking-wide">{label}</p>
       <p className={`font-bold mt-0.5 ${color} ${small ? "text-sm" : "text-xl"}`}>{value}</p>
     </div>
   );

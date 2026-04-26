@@ -114,16 +114,16 @@ export default function MultiFeedDemo() {
   return (
     <div className="flex flex-col gap-5">
       {/* Description banner */}
-      <div className="bg-blue-950/30 border border-blue-900/50 rounded-xl px-4 py-3 flex items-start gap-3">
-        <div className="w-8 h-8 bg-blue-900/60 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-blue-300 font-bold text-xs">
+      <div className="bg-white border border-sensara-border rounded-xl px-4 py-3 flex items-start gap-3 shadow-sm">
+        <div className="w-8 h-8 bg-sensara-forest-800 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-white font-bold text-xs">
           4×
         </div>
         <div>
-          <h2 className="text-white font-semibold text-sm">Multi-Room Command Center</h2>
-          <p className="text-gray-400 text-xs mt-1 leading-relaxed">
+          <h2 className="text-sensara-forest-900 font-semibold text-sm">Multi-Room Command Center</h2>
+          <p className="text-sensara-warm-700 text-xs mt-1 leading-relaxed">
             Simulated four-camera care-home command center using prerecorded video feeds. Designed to
-            demonstrate how ElderWatch AI scales to multiple residents and rooms. Events are{" "}
-            <span className="text-yellow-300">not automatically saved to MongoDB or uploaded to S3</span> —
+            demonstrate how Sensara scales to multiple residents and rooms. Events are{" "}
+            <span className="text-yellow-700 font-medium">not automatically saved to MongoDB or uploaded to S3</span> —
             use the Save buttons to persist selected alerts.
           </p>
         </div>

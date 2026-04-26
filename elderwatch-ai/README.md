@@ -127,6 +127,7 @@ Full real-time webcam demo with all existing functionality preserved:
 | ElevenLabs audio monitoring (STT + distress classification) | ✅ MVP |
 | Visual-only choking detection (sustained 4s hands-near-throat, no audio required) | ✅ MVP |
 | Pause Monitoring (stops all detection, classification, and S3 uploads) | ✅ MVP |
+| Twilio SMS alerts on urgent events (2-min per-resident cooldown) | ✅ MVP |
 
 ---
 
@@ -172,6 +173,7 @@ Canvas chip in the top-left corner shows "● URGENT".
 | Video Capture | Browser MediaRecorder API (WebM/VP9) |
 | Audio Alerts | Web Speech API (`speechSynthesis`) |
 | Audio STT | ElevenLabs `scribe_v2` (optional) |
+| SMS Alerts | Twilio Programmable Messaging (optional) |
 | AI Assistant | Claude API (`claude-haiku`) or mocked responses |
 
 ---
@@ -269,6 +271,12 @@ AWS_S3_BUCKET=your-elderwatch-clips-bucket
 
 # ElevenLabs STT for audio monitoring (optional — simulate mode available without it)
 ELEVENLABS_API_KEY=sk_...
+
+# Twilio SMS alerts for urgent events (optional — alerts skipped if absent)
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
+CAREGIVER_PHONE_NUMBER=+1xxxxxxxxxx
 ```
 
 ### 3. Run

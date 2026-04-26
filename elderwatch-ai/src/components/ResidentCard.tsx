@@ -29,17 +29,17 @@ const EVENT_LABELS: Record<string, string> = {
 
 // Pulse border style depending on severity
 const PULSE_BORDER: Record<string, string> = {
-  stable: "border-gray-700",
-  watch: "border-yellow-600 animate-pulse-watch",
+  stable: "border-sensara-border",
+  watch: "border-yellow-500 animate-pulse-watch",
   assist: "border-orange-500 animate-pulse-assist",
   urgent: "border-red-500 animate-pulse-urgent",
 };
 
 const BG_TINT: Record<string, string> = {
-  stable: "bg-gray-800",
-  watch: "bg-yellow-950/20",
-  assist: "bg-orange-950/30",
-  urgent: "bg-red-950/30",
+  stable: "bg-white",
+  watch: "bg-yellow-50",
+  assist: "bg-orange-50",
+  urgent: "bg-red-50",
 };
 
 export default function ResidentCard({
@@ -60,7 +60,7 @@ export default function ResidentCard({
         <select
           value={resident.id}
           onChange={(e) => onSelectResident(e.target.value)}
-          className="bg-gray-700 text-white text-sm rounded-lg px-3 py-1.5 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+          className="bg-sensara-warm-100 text-sensara-forest-900 text-sm rounded-lg px-3 py-1.5 border border-sensara-border focus:outline-none focus:ring-1 focus:ring-sensara-forest-500 cursor-pointer"
         >
           {residents.map((r) => (
             <option key={r.id} value={r.id}>
@@ -74,58 +74,58 @@ export default function ResidentCard({
       {/* Profile info */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Name</p>
-          <p className="text-white font-semibold">{resident.name}</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Name</p>
+          <p className="text-sensara-forest-900 font-semibold">{resident.name}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Room</p>
-          <p className="text-white font-semibold">{resident.room}</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Room</p>
+          <p className="text-sensara-forest-900 font-semibold">{resident.room}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Age</p>
-          <p className="text-gray-300">{resident.age}</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Age</p>
+          <p className="text-sensara-forest-800">{resident.age}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Fall Risk</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Fall Risk</p>
           <p className={`font-semibold ${FALL_RISK_COLOR[resident.fallRisk]}`}>
             {resident.fallRisk}
           </p>
         </div>
         <div className="col-span-2">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Mobility</p>
-          <p className="text-gray-300">{resident.mobility}</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Mobility</p>
+          <p className="text-sensara-forest-800">{resident.mobility}</p>
         </div>
         <div className="col-span-2">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Conditions</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Conditions</p>
           <div className="flex flex-wrap gap-1 mt-0.5">
             {resident.conditions.map((c) => (
-              <span key={c} className="text-xs bg-gray-700 text-gray-300 rounded-full px-2 py-0.5">
+              <span key={c} className="text-xs bg-sensara-forest-100 text-sensara-forest-800 border border-sensara-forest-200 rounded-full px-2 py-0.5">
                 {c}
               </span>
             ))}
           </div>
         </div>
         <div className="col-span-2">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Care Notes</p>
-          <p className="text-gray-400 text-sm italic">{resident.careNotes}</p>
+          <p className="text-xs text-sensara-warm-600 uppercase tracking-wide">Care Notes</p>
+          <p className="text-sensara-warm-700 text-sm italic">{resident.careNotes}</p>
         </div>
       </div>
 
-      <hr className="border-gray-700 mb-3" />
+      <hr className="border-sensara-divider mb-3" />
 
       {/* Current event */}
       <div>
-        <p className="text-xs text-gray-500 uppercase tracking-wide mb-1.5">Current Status</p>
-        <div className="bg-gray-900/60 rounded-lg p-3 space-y-1.5">
+        <p className="text-xs text-sensara-warm-600 uppercase tracking-wide mb-1.5">Current Status</p>
+        <div className="bg-sensara-warm-100 rounded-lg p-3 space-y-1.5 border border-sensara-divider">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-white">
+            <span className="text-sm font-semibold text-sensara-forest-900">
               {EVENT_LABELS[eventType] ?? eventType}
             </span>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-sensara-warm-600">
               {Math.round(confidence * 100)}% confidence
             </span>
           </div>
-          <p className="text-sm text-gray-300">{reason}</p>
+          <p className="text-sm text-sensara-forest-800">{reason}</p>
 
           {/* Pose signal summary */}
           <div className="grid grid-cols-3 gap-1 mt-2 text-[10px] font-mono">
@@ -137,7 +137,7 @@ export default function ResidentCard({
       </div>
 
       {/* Mock data disclaimer */}
-      <p className="text-[10px] text-gray-600 mt-3 text-center">
+      <p className="text-[10px] text-sensara-warm-500 mt-3 text-center">
         MOCK DATA ONLY — Not a real resident
       </p>
     </div>
@@ -156,10 +156,10 @@ function SignalPill({
   danger?: boolean;
 }) {
   const color = danger
-    ? "bg-red-950/50 text-red-300 border-red-800"
+    ? "bg-red-100 text-red-700 border-red-300"
     : warn
-    ? "bg-yellow-950/50 text-yellow-300 border-yellow-800"
-    : "bg-gray-700/50 text-gray-400 border-gray-600";
+    ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+    : "bg-sensara-warm-100 text-sensara-warm-700 border-sensara-border";
 
   return (
     <div className={`rounded border px-1.5 py-1 text-center ${color}`}>

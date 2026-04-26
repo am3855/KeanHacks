@@ -43,7 +43,7 @@ function saveSafeZone(z: SafeZone) {
 const PoseCamera = dynamic(() => import("@/components/PoseCamera"), { ssr: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ElderWatch AI — Main Dashboard
+// Sensara — Main Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
 type MainTab = "multi-feed" | "live-camera";
@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [mongoConnected, setMongoConnected] = useState(false);
   const [s3Configured, setS3Configured] = useState(false);
   const [elevenLabsConfigured, setElevenLabsConfigured] = useState(false);
+  const [smsConfigured, setSmsConfigured] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [seizureDetectionEnabled, setSeizureDetectionEnabled] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
@@ -125,6 +126,11 @@ export default function Dashboard() {
       .then((r) => r.json())
       .then((d) => setElevenLabsConfigured(d.elevenLabsConfigured === true))
       .catch(() => setElevenLabsConfigured(false));
+
+    fetch("/api/status")
+      .then((r) => r.json())
+      .then((d) => setSmsConfigured(d.smsConfigured === true))
+      .catch(() => setSmsConfigured(false));
   }, []);
 
   // ── Acknowledge event ─────────────────────────────────────────────────────
@@ -179,25 +185,27 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+    <div className="min-h-screen bg-sensara-cream text-sensara-forest-900 flex flex-col">
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
-      <header className="border-b border-gray-800 bg-slate-900/80 backdrop-blur sticky top-0 z-20">
+      <header className="border-b border-sensara-forest-900 bg-sensara-forest-800 sticky top-0 z-20">
         <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
 
           {/* Logo */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-sm font-bold">
-              EW
-            </div>
+            <img
+              src="/sensara-logo.png"
+              alt="Sensara"
+              className="w-20 h-20 object-contain"
+            />
             <div>
-              <h1 className="text-white font-bold text-lg leading-tight">ElderWatch AI</h1>
-              <p className="text-gray-500 text-xs">Real-time visual safety monitoring</p>
+              <h1 className="text-white font-bold text-lg leading-tight italic" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>Sensara</h1>
+              <p className="text-sensara-forest-300 text-xs tracking-wide uppercase">Visual Safety Monitoring</p>
             </div>
           </div>
 
           {/* Main tab switcher */}
-          <div className="flex items-center gap-1 bg-gray-800/80 border border-gray-700 rounded-xl p-1 mx-auto">
+          <div className="flex items-center gap-1 bg-sensara-forest-900/60 border border-sensara-forest-700 rounded-xl p-1 mx-auto">
             <MainTabButton
               active={mainTab === "multi-feed"}
               onClick={() => setMainTab("multi-feed")}
@@ -212,34 +220,19 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* Status indicators */}
+          {/* Pause control */}
           <div className="flex items-center gap-2 flex-wrap justify-end ml-auto">
             {isPaused && (
-              <span className="text-xs font-bold text-yellow-300 bg-yellow-900/60 border border-yellow-700 rounded-lg px-3 py-1.5 animate-pulse">
+              <span className="text-xs font-bold text-yellow-300 bg-yellow-900/80 border border-yellow-600 rounded-lg px-3 py-1.5 animate-pulse">
                 ⏸ PAUSED
               </span>
             )}
-            <StatusPill
-              active={mongoConnected}
-              label={mongoConnected ? "MongoDB" : "No DB"}
-              color={mongoConnected ? "green" : "yellow"}
-            />
-            <StatusPill
-              active={s3Configured}
-              label={s3Configured ? "S3 Ready" : "S3 Off"}
-              color={s3Configured ? "green" : "yellow"}
-            />
-            <StatusPill
-              active={elevenLabsConfigured}
-              label={elevenLabsConfigured ? "STT Ready" : "STT Off"}
-              color={elevenLabsConfigured ? "green" : "yellow"}
-            />
             <button
               onClick={() => setIsPaused((p) => !p)}
               className={`text-xs rounded-lg px-3 py-1.5 transition-colors border font-medium ${
                 isPaused
-                  ? "bg-green-900/70 hover:bg-green-800/80 text-green-200 border-green-700"
-                  : "bg-yellow-900/70 hover:bg-yellow-800/80 text-yellow-200 border-yellow-700"
+                  ? "bg-sensara-forest-600 hover:bg-sensara-forest-500 text-white border-sensara-forest-500"
+                  : "bg-yellow-700/70 hover:bg-yellow-600/80 text-yellow-100 border-yellow-600"
               }`}
             >
               {isPaused ? "▶ Resume" : "⏸ Pause"}
@@ -247,13 +240,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Disclaimer banner */}
-        <div className="bg-amber-950/50 border-t border-amber-900/50 px-4 py-1.5 text-center">
-          <p className="text-amber-400 text-xs">
-            ⚠️ <strong>Prototype only.</strong> Not a medical device. Do not use for real patient care.
-            All resident data shown is <strong>mock/demo data only</strong>.
-          </p>
-        </div>
       </header>
 
       {/* ── Toasts (always on top, fixed position) ────────────────────────── */}
@@ -289,40 +275,20 @@ export default function Dashboard() {
             usePoseDetection can complete its init even while Multi-Feed tab is active. */}
         <div className={mainTab === "live-camera" ? "" : "hidden"}>
           <div>
-            {/* Live Camera description */}
-            <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl px-4 py-2.5 mb-4 flex items-center justify-between gap-4 flex-wrap">
-              <p className="text-gray-400 text-xs">
-                Live single-room demo using this device&apos;s camera and microphone with pose detection,
-                audio monitoring, MongoDB history, and S3 critical-event clip storage.
-              </p>
-              <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                <StatusPill
-                  active={poseStatus === "running" && !isPaused}
-                  label={isPaused ? "Paused" : poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
-                  color={isPaused ? "yellow" : poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
-                />
-                <button
-                  onClick={handleTriggerDemo}
-                  disabled={poseStatus !== "running" || isPaused}
-                  className="text-xs bg-red-900/70 hover:bg-red-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-red-200 border border-red-800/60 rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  ⚡ Trigger Critical Event
-                </button>
-                <button
-                  onClick={handleSimulateChoking}
-                  disabled={poseStatus !== "running" || isPaused}
-                  className="text-xs bg-purple-900/70 hover:bg-purple-800/80 disabled:bg-gray-700 disabled:text-gray-500 text-purple-200 border border-purple-800/60 rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  🤲 Simulate Choking
-                </button>
-                <button
-                  onClick={handleSeed}
-                  disabled={isSeedLoading}
-                  className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  {isSeedLoading ? "Seeding…" : "Seed Demo Data"}
-                </button>
-              </div>
+            {/* Live Camera controls */}
+            <div className="bg-white border border-sensara-border rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2 flex-wrap">
+              <StatusPill
+                active={poseStatus === "running" && !isPaused}
+                label={isPaused ? "Paused" : poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
+                color={isPaused ? "yellow" : poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
+              />
+              <button
+                onClick={handleTriggerDemo}
+                disabled={poseStatus !== "running" || isPaused}
+                className="text-xs bg-red-700 hover:bg-red-600 disabled:bg-sensara-warm-200 disabled:text-sensara-warm-500 text-white border border-red-600 rounded-lg px-3 py-1.5 transition-colors"
+              >
+                ⚡ Trigger Critical Event
+              </button>
             </div>
 
             {/* Two-column live camera layout */}
@@ -334,7 +300,7 @@ export default function Dashboard() {
                 {/* Camera feed */}
                 <div className={`rounded-xl overflow-hidden transition-shadow duration-500 ${severityGlow[classification.severity]}`}>
                   <div className="flex items-center justify-between px-1 mb-2">
-                    <h2 className="text-gray-300 text-sm font-medium flex items-center gap-2">
+                    <h2 className="text-sensara-forest-800 text-sm font-semibold flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                       Live Feed — {selectedResident.room}
                     </h2>
@@ -354,26 +320,8 @@ export default function Dashboard() {
                   />
                 </div>
 
-                {/* Seizure detection toggle */}
-                <div className="flex items-center gap-2.5 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={seizureDetectionEnabled}
-                      onChange={(e) => setSeizureDetectionEnabled(e.target.checked)}
-                      className="w-3.5 h-3.5 accent-purple-500"
-                    />
-                    <span className="text-xs text-gray-400">
-                      <span className="text-purple-300 font-medium">Experimental:</span> Seizure-like movement detection
-                    </span>
-                  </label>
-                  <span className="text-[10px] text-gray-600 ml-auto">
-                    {seizureDetectionEnabled ? "ON — requires 6s sustained motion" : "OFF (default)"}
-                  </span>
-                </div>
-
                 {/* Safe zone controls */}
-                <div className="flex items-center gap-3 flex-wrap bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-3 flex-wrap bg-white border border-sensara-border rounded-lg px-3 py-2">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -382,51 +330,51 @@ export default function Dashboard() {
                       className="w-3.5 h-3.5 accent-green-500"
                     />
                     <span className="text-xs">
-                      <span className="text-green-300 font-medium">Edit Safe Zone</span>
+                      <span className="text-sensara-forest-600 font-medium">Edit Safe Zone</span>
                     </span>
                   </label>
                   <button
                     onClick={resetSafeZone}
-                    className="text-xs bg-gray-700/80 hover:bg-gray-600/80 text-gray-300 border border-gray-600 rounded px-2 py-0.5 transition-colors"
+                    className="text-xs bg-sensara-warm-100 hover:bg-sensara-warm-200 text-sensara-forest-700 border border-sensara-border rounded px-2 py-0.5 transition-colors"
                   >
                     Reset Safe Zone
                   </button>
-                  <span className="text-[10px] text-gray-600 ml-auto hidden sm:block">
-                    Drag corners or box to resize · Uses torso center · Persists across refreshes
+                  <span className="text-[10px] text-sensara-warm-500 ml-auto hidden sm:block">
+                    Drag edges to resize · Uses torso center · Persists across refreshes
                   </span>
                 </div>
 
                 {/* Vision Debug: choking detection state */}
-                <div className="bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+                <div className="bg-white border border-sensara-border rounded-lg px-3 py-2 shadow-sm">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Vision Debug — Choking Detection</span>
-                    <span className="text-[10px] text-gray-600">threshold: {DETECTION_THRESHOLDS.chokingHandDurationSeconds}s</span>
+                    <span className="text-[10px] text-sensara-warm-600 font-medium uppercase tracking-wider">Vision Debug — Choking Detection</span>
+                    <span className="text-[10px] text-sensara-warm-400">threshold: {DETECTION_THRESHOLDS.chokingHandDurationSeconds}s</span>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <DebugPill
                       label="Left Hand"
                       active={signals.leftHandNearThroat ?? false}
-                      activeColor="text-red-300"
+                      activeColor="text-red-600"
                       activeLabel="Near throat"
                       inactiveLabel="Away"
                     />
                     <DebugPill
                       label="Right Hand"
                       active={signals.rightHandNearThroat ?? false}
-                      activeColor="text-orange-300"
+                      activeColor="text-orange-600"
                       activeLabel="Near throat"
                       inactiveLabel="Away"
                     />
                     <DebugPill
                       label="Both Hands"
                       active={signals.bothHandsNearThroat ?? false}
-                      activeColor="text-yellow-300"
+                      activeColor="text-yellow-600"
                       activeLabel="Both near"
                       inactiveLabel="No"
                     />
                     <div className="flex items-center gap-1.5 ml-auto">
-                      <span className="text-[10px] text-gray-500">Timer:</span>
-                      <div className="w-24 h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <span className="text-[10px] text-sensara-warm-500">Timer:</span>
+                      <div className="w-24 h-2 bg-sensara-warm-200 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-200"
                           style={{
@@ -435,11 +383,11 @@ export default function Dashboard() {
                               ? "#ef4444"
                               : (signals.handsNearThroatSeconds ?? 0) > 0
                               ? "#f97316"
-                              : "#374151",
+                              : "#d4c9b0",
                           }}
                         />
                       </div>
-                      <span className="text-[10px] text-gray-400 w-8 text-right">
+                      <span className="text-[10px] text-sensara-forest-700 w-8 text-right">
                         {((signals.handsNearThroatSeconds ?? 0)).toFixed(1)}s
                       </span>
                     </div>
@@ -470,8 +418,8 @@ export default function Dashboard() {
                   onSelectResident={setSelectedResidentId}
                 />
 
-                <div className="bg-gray-800 rounded-xl border border-gray-700 flex flex-col">
-                  <div className="flex border-b border-gray-700">
+                <div className="bg-white rounded-xl border border-sensara-border flex flex-col shadow-sm">
+                  <div className="flex border-b border-sensara-divider">
                     <TabButton
                       active={activeTab === "monitor"}
                       onClick={() => setActiveTab("monitor")}
@@ -503,9 +451,9 @@ export default function Dashboard() {
       </main>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-gray-800 py-3 px-4 text-center text-xs text-gray-700">
-        ElderWatch AI — Prototype · Hackathon Demo · Not for clinical use ·{" "}
-        <span className="text-gray-600">Mock resident data only</span>
+      <footer className="border-t border-sensara-border py-3 px-4 text-center text-xs text-sensara-warm-600">
+        Sensara — Prototype · Hackathon Demo · Not for clinical use ·{" "}
+        <span className="text-sensara-warm-500">Mock resident data only</span>
       </footer>
     </div>
   );
@@ -529,13 +477,13 @@ function MainTabButton({
       onClick={onClick}
       className={`flex flex-col items-center px-4 py-2 rounded-lg transition-all text-xs font-semibold ${
         active
-          ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40"
-          : "text-gray-400 hover:text-gray-200 hover:bg-gray-700/50"
+          ? "bg-sensara-forest-500 text-white shadow-lg shadow-sensara-forest-900/40"
+          : "text-sensara-forest-200 hover:text-white hover:bg-sensara-forest-700/60"
       }`}
     >
       {label}
       {desc && (
-        <span className={`text-[10px] font-normal mt-0.5 ${active ? "text-blue-200" : "text-gray-600"}`}>
+        <span className={`text-[10px] font-normal mt-0.5 ${active ? "text-sensara-forest-100" : "text-sensara-forest-400"}`}>
           {desc}
         </span>
       )}
@@ -558,7 +506,7 @@ function StatusPill({
     color === "green" ? "text-green-300" : color === "yellow" ? "text-yellow-300" : "text-red-300";
 
   return (
-    <div className="flex items-center gap-1.5 bg-gray-800 rounded-full px-2.5 py-1 border border-gray-700">
+    <div className="flex items-center gap-1.5 bg-sensara-forest-900/80 rounded-full px-2.5 py-1 border border-sensara-forest-700">
       <div className={`w-1.5 h-1.5 rounded-full ${dotColor} ${active ? "animate-pulse" : ""}`} />
       <span className={`text-xs ${textColor}`}>{label}</span>
     </div>
@@ -579,8 +527,8 @@ function TabButton({
       onClick={onClick}
       className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
         active
-          ? "text-blue-400 border-b-2 border-blue-400"
-          : "text-gray-500 hover:text-gray-300"
+          ? "text-sensara-forest-700 border-b-2 border-sensara-forest-700"
+          : "text-sensara-warm-600 hover:text-sensara-forest-800"
       }`}
     >
       {label}
@@ -603,9 +551,9 @@ function DebugPill({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-red-400 animate-pulse" : "bg-gray-600"}`} />
-      <span className="text-[10px] text-gray-500">{label}:</span>
-      <span className={`text-[10px] font-medium ${active ? activeColor : "text-gray-600"}`}>
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-red-500 animate-pulse" : "bg-sensara-warm-300"}`} />
+      <span className="text-[10px] text-sensara-warm-600">{label}:</span>
+      <span className={`text-[10px] font-medium ${active ? activeColor : "text-sensara-warm-500"}`}>
         {active ? activeLabel : inactiveLabel}
       </span>
     </div>

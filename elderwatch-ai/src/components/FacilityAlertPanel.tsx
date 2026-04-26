@@ -124,17 +124,17 @@ export default function FacilityAlertPanel({
   const urgentCount = activeAlerts.filter(a => a.severity === "urgent").length;
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl flex flex-col min-h-0 xl:h-full">
+    <div className="bg-white border border-sensara-border rounded-xl flex flex-col min-h-0 xl:h-full shadow-sm">
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-gray-700 shrink-0">
+      <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-sensara-divider shrink-0">
         <div>
-          <h3 className="text-white font-semibold text-sm">Facility Alert Panel</h3>
-          <p className="text-gray-500 text-[10px] mt-0.5">Simulated multi-room monitoring</p>
+          <h3 className="text-sensara-forest-900 font-semibold text-sm">Facility Alert Panel</h3>
+          <p className="text-sensara-warm-600 text-[10px] mt-0.5">Simulated multi-room monitoring</p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-1.5 bg-gray-700/50 rounded-full px-2.5 py-1">
-            <div className={`w-1.5 h-1.5 rounded-full ${urgentCount > 0 ? "bg-red-400 animate-pulse" : activeAlerts.length > 0 ? "bg-yellow-400 animate-pulse" : "bg-green-400"}`} />
-            <span className="text-[10px] text-gray-300">
+          <div className="flex items-center gap-1.5 bg-sensara-warm-100 border border-sensara-divider rounded-full px-2.5 py-1">
+            <div className={`w-1.5 h-1.5 rounded-full ${urgentCount > 0 ? "bg-red-500 animate-pulse" : activeAlerts.length > 0 ? "bg-yellow-500 animate-pulse" : "bg-green-500"}`} />
+            <span className="text-[10px] text-sensara-forest-700">
               {activeAlerts.length === 0 ? "All stable" : `${activeAlerts.length} alert${activeAlerts.length !== 1 ? "s" : ""}`}
             </span>
           </div>
@@ -142,13 +142,13 @@ export default function FacilityAlertPanel({
             <button
               onClick={handleSaveAll}
               disabled={savingAll || activeAlerts.every(a => savedIds.has(a.feedId))}
-              className="text-[10px] bg-blue-900/60 hover:bg-blue-800/70 disabled:opacity-40 text-blue-200 border border-blue-800/50 rounded-lg px-2.5 py-1 transition-colors whitespace-nowrap"
+              className="text-[10px] bg-sensara-forest-700 hover:bg-sensara-forest-600 disabled:opacity-40 text-white border border-sensara-forest-500 rounded-lg px-2.5 py-1 transition-colors whitespace-nowrap"
             >
               {savingAll ? "Saving…" : "Save All Alerts"}
             </button>
           )}
           {savedAllMsg && (
-            <span className="text-[10px] text-green-400">{savedAllMsg}</span>
+            <span className="text-[10px] text-green-600">{savedAllMsg}</span>
           )}
         </div>
       </div>
@@ -157,23 +157,23 @@ export default function FacilityAlertPanel({
       <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar min-h-[200px]">
         {activeAlerts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="w-10 h-10 rounded-full bg-green-900/40 border border-green-800/40 flex items-center justify-center mb-3">
-              <span className="text-green-400 text-lg">✓</span>
+            <div className="w-10 h-10 rounded-full bg-green-100 border border-green-300 flex items-center justify-center mb-3">
+              <span className="text-green-600 text-lg">✓</span>
             </div>
-            <p className="text-gray-400 text-sm font-medium">All residents stable</p>
-            <p className="text-gray-600 text-[10px] mt-1">No active alerts from any feed</p>
+            <p className="text-sensara-forest-700 text-sm font-medium">All residents stable</p>
+            <p className="text-sensara-warm-500 text-[10px] mt-1">No active alerts from any feed</p>
           </div>
         ) : (
           activeAlerts.map(alert => {
             const isUrgent = alert.severity === "urgent";
             const isAssist = alert.severity === "assist";
             const borderClass = isUrgent
-              ? "bg-red-950/30 border-red-800/50"
+              ? "bg-red-50 border-red-300"
               : isAssist
-              ? "bg-orange-950/30 border-orange-800/50"
-              : "bg-yellow-950/30 border-yellow-800/40";
-            const dotClass = isUrgent ? "bg-red-400" : isAssist ? "bg-orange-400" : "bg-yellow-400";
-            const labelColor = isUrgent ? "#fca5a5" : isAssist ? "#fdba74" : "#fde047";
+              ? "bg-orange-50 border-orange-300"
+              : "bg-yellow-50 border-yellow-300";
+            const dotClass = isUrgent ? "bg-red-500" : isAssist ? "bg-orange-500" : "bg-yellow-500";
+            const labelColor = isUrgent ? "#dc2626" : isAssist ? "#ea580c" : "#ca8a04";
             const isCared = markedIds.has(alert.feedId);
             const isSaved = savedIds.has(alert.feedId);
             const isSavingThis = savingIds.has(alert.feedId);
@@ -187,8 +187,8 @@ export default function FacilityAlertPanel({
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full shrink-0 mt-0.5 ${dotClass} ${isUrgent ? "animate-pulse" : ""}`} />
                     <div>
-                      <p className="text-white text-xs font-semibold leading-tight">{alert.resident}</p>
-                      <p className="text-gray-400 text-[10px]">{alert.room}</p>
+                      <p className="text-sensara-forest-900 text-xs font-semibold leading-tight">{alert.resident}</p>
+                      <p className="text-sensara-warm-600 text-[10px]">{alert.room}</p>
                     </div>
                   </div>
                   <SafetyBadge severity={alert.severity} size="sm" pulse={isUrgent} />
@@ -198,29 +198,29 @@ export default function FacilityAlertPanel({
                   <p className="text-[11px] font-semibold" style={{ color: labelColor }}>
                     {EVENT_LABELS[alert.eventType] ?? alert.eventType}
                   </p>
-                  <p className="text-gray-400 text-[10px] mt-0.5 leading-relaxed line-clamp-2">{alert.reason}</p>
+                  <p className="text-sensara-warm-700 text-[10px] mt-0.5 leading-relaxed line-clamp-2">{alert.reason}</p>
                 </div>
 
                 <div className="flex items-center justify-between gap-1">
-                  <div className="flex items-center gap-1.5 text-[9px] text-gray-500 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-[9px] text-sensara-warm-500 flex-wrap">
                     <span>Active {formatWaitTime(alert.alertSince)}</span>
                     <span>·</span>
                     <span>{Math.round(alert.confidence * 100)}% conf.</span>
-                    {isCared && <span className="text-green-400 font-medium">✓ In care</span>}
-                    {isSaved && <span className="text-blue-400 font-medium">✓ Saved</span>}
+                    {isCared && <span className="text-green-600 font-medium">✓ In care</span>}
+                    {isSaved && <span className="text-sensara-forest-600 font-medium">✓ Saved</span>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleMarkCare(alert.feedId)}
                       disabled={isCared}
-                      className="text-[9px] bg-green-900/50 hover:bg-green-800/60 disabled:opacity-40 text-green-200 border border-green-800/40 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap"
+                      className="text-[9px] bg-green-100 hover:bg-green-200 disabled:opacity-40 text-green-700 border border-green-300 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap"
                     >
                       {isCared ? "In Care" : "Mark Care"}
                     </button>
                     <button
                       onClick={() => handleSave(alert)}
                       disabled={isSavingThis || isSaved}
-                      className="text-[9px] bg-blue-900/50 hover:bg-blue-800/60 disabled:opacity-40 text-blue-200 border border-blue-800/40 rounded px-1.5 py-0.5 transition-colors"
+                      className="text-[9px] bg-sensara-forest-700 hover:bg-sensara-forest-600 disabled:opacity-40 text-white border border-sensara-forest-500 rounded px-1.5 py-0.5 transition-colors"
                     >
                       {isSavingThis ? "…" : isSaved ? "Saved" : "Save"}
                     </button>
@@ -232,8 +232,8 @@ export default function FacilityAlertPanel({
         )}
       </div>
 
-      <div className="px-4 py-2 border-t border-gray-700 shrink-0">
-        <p className="text-[9px] text-gray-600 text-center">
+      <div className="px-4 py-2 border-t border-sensara-divider shrink-0">
+        <p className="text-[9px] text-sensara-warm-400 text-center">
           Simulated alerts · Not for clinical use · Prototype only
         </p>
       </div>

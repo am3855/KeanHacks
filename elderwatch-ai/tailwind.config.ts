@@ -38,8 +38,37 @@ const config: Config = {
         },
       },
       colors: {
+        // Sensara brand palette
+        sensara: {
+          cream:   "#f4f0e8",
+          card:    "#ffffff",
+          border:  "#d4c9b0",
+          divider: "#e8e0d0",
+          forest: {
+            950: "#0f1f18",
+            900: "#1a2e25",
+            800: "#2f4a3a",
+            700: "#3d6b52",
+            600: "#4d8566",
+            500: "#5a9e78",
+            400: "#7ab896",
+            300: "#9ecfb4",
+            200: "#c2e4d2",
+            100: "#e6f5ed",
+          },
+          warm: {
+            700: "#5c6b62",
+            600: "#7a8a80",
+            500: "#8a9a90",
+            400: "#b0bdb6",
+            300: "#d4c9b0",
+            200: "#e8e0d0",
+            100: "#f4f1eb",
+          },
+        },
+        // Severity colors (unchanged — critical for readability)
         stable: { bg: "#166534", border: "#22c55e", text: "#86efac" },
-        watch: { bg: "#713f12", border: "#eab308", text: "#fde047" },
+        watch:  { bg: "#713f12", border: "#eab308", text: "#fde047" },
         assist: { bg: "#7c2d12", border: "#f97316", text: "#fdba74" },
         urgent: { bg: "#7f1d1d", border: "#ef4444", text: "#fca5a5" },
       },

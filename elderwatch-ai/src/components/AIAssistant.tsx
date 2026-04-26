@@ -50,12 +50,12 @@ export default function AIAssistant({ resident, classification }: AIAssistantPro
   }
 
   return (
-    <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-3">
+    <div className="bg-white rounded-xl border border-sensara-border p-4 flex flex-col gap-3 shadow-sm">
       <div className="flex items-center gap-2">
         <span className="text-lg">🤖</span>
         <div>
-          <h3 className="text-white font-semibold text-sm">AI Care Assistant</h3>
-          <p className="text-gray-500 text-[10px]">General guidance only — not medical advice</p>
+          <h3 className="text-sensara-forest-900 font-semibold text-sm">AI Care Assistant</h3>
+          <p className="text-sensara-warm-500 text-[10px]">General guidance only — not medical advice</p>
         </div>
       </div>
 
@@ -65,7 +65,7 @@ export default function AIAssistant({ resident, classification }: AIAssistantPro
           <button
             key={q}
             onClick={() => { setQuestion(q); askQuestion(q); }}
-            className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-full px-3 py-1 transition-colors"
+            className="text-xs bg-sensara-warm-100 hover:bg-sensara-warm-200 text-sensara-forest-700 border border-sensara-border rounded-full px-3 py-1 transition-colors"
             disabled={loading}
           >
             {q}
@@ -81,13 +81,13 @@ export default function AIAssistant({ resident, classification }: AIAssistantPro
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && askQuestion(question)}
           placeholder="Ask about this situation…"
-          className="flex-1 text-sm bg-gray-700 text-white rounded-lg px-3 py-2 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="flex-1 text-sm bg-sensara-warm-100 text-sensara-forest-900 rounded-lg px-3 py-2 border border-sensara-border focus:outline-none focus:ring-1 focus:ring-sensara-forest-500"
           disabled={loading}
         />
         <button
           onClick={() => askQuestion(question)}
           disabled={loading || !question.trim()}
-          className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg px-3 py-2 text-sm transition-colors"
+          className="bg-sensara-forest-700 hover:bg-sensara-forest-600 disabled:bg-sensara-warm-200 disabled:text-sensara-warm-500 text-white rounded-lg px-3 py-2 text-sm transition-colors"
         >
           {loading ? (
             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
@@ -97,19 +97,19 @@ export default function AIAssistant({ resident, classification }: AIAssistantPro
 
       {/* Response */}
       {error && (
-        <div className="bg-red-950/40 border border-red-800/60 rounded-lg p-3 text-red-300 text-sm">
+        <div className="bg-red-50 border border-red-300 rounded-lg p-3 text-red-700 text-sm">
           {error}
         </div>
       )}
 
       {response && (
-        <div className="bg-gray-900/60 border border-gray-700 rounded-lg p-3 space-y-2 animate-fade-in">
-          <p className="text-gray-200 text-sm leading-relaxed">{response.guidance}</p>
-          <p className="text-[10px] text-gray-600 border-t border-gray-700 pt-1.5">
+        <div className="bg-sensara-warm-100 border border-sensara-divider rounded-lg p-3 space-y-2 animate-fade-in">
+          <p className="text-sensara-forest-800 text-sm leading-relaxed">{response.guidance}</p>
+          <p className="text-[10px] text-sensara-warm-500 border-t border-sensara-divider pt-1.5">
             ⚠️ {response.disclaimer}
           </p>
           {response.generatedBy === "mock" && (
-            <p className="text-[10px] text-gray-600">
+            <p className="text-[10px] text-sensara-warm-400">
               (Mock guidance — set ANTHROPIC_API_KEY to enable Claude)
             </p>
           )}

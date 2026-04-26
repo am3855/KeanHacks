@@ -288,31 +288,31 @@ export default function AudioMonitor({
   const isListening = micStatus === "listening" || micStatus === "transcribing";
 
   const severityBg: Record<string, string> = {
-    urgent: "text-red-300 bg-red-950/40 border-red-800/60",
-    assist: "text-orange-300 bg-orange-950/40 border-orange-800/60",
-    watch: "text-yellow-300 bg-yellow-950/40 border-yellow-800/60",
-    stable: "text-green-300 bg-green-950/40 border-green-800/60",
+    urgent: "text-red-700 bg-red-50 border-red-300",
+    assist: "text-orange-700 bg-orange-50 border-orange-300",
+    watch: "text-yellow-700 bg-yellow-50 border-yellow-300",
+    stable: "text-green-700 bg-green-50 border-green-300",
   };
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col gap-3">
+    <div className="bg-white border border-sensara-border rounded-xl p-4 flex flex-col gap-3 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-base">🎙️</span>
-          <span className="text-white font-semibold text-sm">Audio Monitor</span>
+          <span className="text-sensara-forest-900 font-semibold text-sm">Audio Monitor</span>
         </div>
         <div className="flex items-center gap-1.5">
           {elevenLabsConfigured === null ? (
-            <span className="text-[10px] text-gray-500">checking…</span>
+            <span className="text-[10px] text-sensara-warm-400">checking…</span>
           ) : elevenLabsConfigured ? (
-            <span className="flex items-center gap-1 text-[10px] text-green-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="flex items-center gap-1 text-[10px] text-green-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               ElevenLabs STT
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-[10px] text-yellow-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+            <span className="flex items-center gap-1 text-[10px] text-yellow-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
               STT Not Configured
             </span>
           )}
@@ -321,7 +321,7 @@ export default function AudioMonitor({
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="bg-yellow-950/40 border border-yellow-800/50 rounded-lg px-3 py-1.5 text-[11px] text-yellow-300 text-center">
+        <div className="bg-yellow-50 border border-yellow-300 rounded-lg px-3 py-1.5 text-[11px] text-yellow-700 text-center">
           Monitoring paused — audio analysis suspended
         </div>
       )}
@@ -329,13 +329,13 @@ export default function AudioMonitor({
       {/* Mic status */}
       <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full shrink-0 ${
-          micStatus === "listening" ? "bg-green-400 animate-pulse" :
-          micStatus === "transcribing" ? "bg-blue-400 animate-pulse" :
-          micStatus === "requesting" ? "bg-yellow-400 animate-pulse" :
-          micStatus === "error" || micStatus === "unsupported" ? "bg-red-400" :
-          "bg-gray-600"
+          micStatus === "listening" ? "bg-green-500 animate-pulse" :
+          micStatus === "transcribing" ? "bg-sensara-forest-500 animate-pulse" :
+          micStatus === "requesting" ? "bg-yellow-500 animate-pulse" :
+          micStatus === "error" || micStatus === "unsupported" ? "bg-red-500" :
+          "bg-sensara-warm-300"
         }`} />
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-sensara-warm-700">
           {micStatus === "idle" && "Not listening"}
           {micStatus === "requesting" && "Requesting microphone…"}
           {micStatus === "listening" && `Listening — ${CHUNK_DURATION_MS / 1000}s chunks`}
@@ -347,7 +347,7 @@ export default function AudioMonitor({
 
       {/* Error detail */}
       {errorMsg && micStatus === "error" && (
-        <div className="bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2 text-[11px] text-red-300">
+        <div className="bg-red-50 border border-red-300 rounded-lg px-3 py-2 text-[11px] text-red-700">
           {errorMsg}
         </div>
       )}
@@ -358,14 +358,14 @@ export default function AudioMonitor({
           <button
             onClick={startListening}
             disabled={micStatus === "requesting" || micStatus === "unsupported" || isPaused}
-            className="flex-1 text-xs bg-green-900/60 hover:bg-green-800/70 disabled:opacity-40 disabled:cursor-not-allowed text-green-200 border border-green-800/50 rounded-lg py-1.5 transition-colors"
+            className="flex-1 text-xs bg-green-100 hover:bg-green-200 disabled:opacity-40 disabled:cursor-not-allowed text-green-700 border border-green-300 rounded-lg py-1.5 transition-colors"
           >
             {isPaused ? "Paused" : "Start Audio Monitor"}
           </button>
         ) : (
           <button
             onClick={stopListening}
-            className="flex-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 border border-gray-600 rounded-lg py-1.5 transition-colors"
+            className="flex-1 text-xs bg-sensara-warm-100 hover:bg-sensara-warm-200 text-sensara-forest-700 border border-sensara-border rounded-lg py-1.5 transition-colors"
           >
             Stop Monitor
           </button>
@@ -373,7 +373,7 @@ export default function AudioMonitor({
         <button
           onClick={handleSimulate}
           disabled={simulating || !resident || isPaused}
-          className="text-xs bg-orange-900/60 hover:bg-orange-800/70 disabled:opacity-40 disabled:cursor-not-allowed text-orange-200 border border-orange-800/50 rounded-lg px-3 py-1.5 transition-colors"
+          className="text-xs bg-orange-100 hover:bg-orange-200 disabled:opacity-40 disabled:cursor-not-allowed text-orange-700 border border-orange-300 rounded-lg px-3 py-1.5 transition-colors"
         >
           {simulating ? "…" : "Simulate Distress"}
         </button>
@@ -381,16 +381,16 @@ export default function AudioMonitor({
 
       {/* Last transcript */}
       {lastTranscript && (
-        <div className="bg-gray-700/50 rounded-lg px-3 py-2">
-          <p className="text-[10px] text-gray-500 mb-0.5">Last Transcript</p>
-          <p className="text-xs text-gray-200 italic">"{lastTranscript}"</p>
+        <div className="bg-sensara-warm-100 border border-sensara-divider rounded-lg px-3 py-2">
+          <p className="text-[10px] text-sensara-warm-500 mb-0.5">Last Transcript</p>
+          <p className="text-xs text-sensara-forest-800 italic">"{lastTranscript}"</p>
         </div>
       )}
 
       {/* Last classification */}
       {lastClassification && lastClassification.severity !== "stable" && (
         <div className={`border rounded-lg px-3 py-2 text-xs ${
-          severityBg[lastClassification.severity] ?? "text-gray-300 bg-gray-700/40 border-gray-600"
+          severityBg[lastClassification.severity] ?? "text-sensara-warm-700 bg-sensara-warm-100 border-sensara-border"
         }`}>
           <div className="flex items-center justify-between mb-0.5">
             <span className="font-semibold uppercase text-[10px] tracking-wide">
@@ -405,12 +405,12 @@ export default function AudioMonitor({
             lastClassification.matchedAudioTags.length > 0) && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {lastClassification.matchedKeywords.map((kw) => (
-                <span key={kw} className="bg-white/10 rounded-full px-1.5 py-0.5 text-[9px]">
+                <span key={kw} className="bg-black/10 rounded-full px-1.5 py-0.5 text-[9px]">
                   "{kw}"
                 </span>
               ))}
               {lastClassification.matchedAudioTags.map((tag) => (
-                <span key={tag} className="bg-white/10 rounded-full px-1.5 py-0.5 text-[9px] opacity-70">
+                <span key={tag} className="bg-black/10 rounded-full px-1.5 py-0.5 text-[9px] opacity-70">
                   [{tag}]
                 </span>
               ))}
@@ -420,10 +420,10 @@ export default function AudioMonitor({
       )}
 
       {lastClassification?.severity === "stable" && lastTranscript && (
-        <p className="text-[10px] text-green-500 text-center">No distress detected</p>
+        <p className="text-[10px] text-green-600 text-center">No distress detected</p>
       )}
 
-      <p className="text-[9px] text-gray-700 text-center leading-tight">
+      <p className="text-[9px] text-sensara-warm-400 text-center leading-tight">
         Audio analysis is indicative only · Not for clinical use · Prototype only
       </p>
     </div>

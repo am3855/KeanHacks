@@ -89,30 +89,30 @@ function VideoClipModal({
       onClick={onClose}
     >
       <div
-        className="relative bg-gray-900 border border-gray-700 rounded-xl p-4 max-w-2xl w-full mx-4 shadow-2xl"
+        className="relative bg-white border border-sensara-border rounded-xl p-4 max-w-2xl w-full mx-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white font-semibold text-sm">
+          <h3 className="text-sensara-forest-900 font-semibold text-sm">
             📹 Video Clip — {eventLabel}
           </h3>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-white text-lg leading-none"
+            className="text-sensara-warm-500 hover:text-sensara-forest-900 text-lg leading-none"
           >
             ✕
           </button>
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-            <span className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin mr-2" />
+          <div className="flex items-center justify-center h-40 text-sensara-warm-500 text-sm">
+            <span className="w-5 h-5 border-2 border-sensara-border border-t-sensara-forest-700 rounded-full animate-spin mr-2" />
             Loading clip…
           </div>
         )}
 
         {error && (
-          <div className="bg-red-950/50 border border-red-800/60 rounded-lg p-4 text-red-300 text-sm">
+          <div className="bg-red-50 border border-red-300 rounded-lg p-4 text-red-700 text-sm">
             {error}
           </div>
         )}
@@ -126,7 +126,7 @@ function VideoClipModal({
           />
         )}
 
-        <p className="text-[10px] text-gray-600 mt-2 text-center">
+        <p className="text-[10px] text-sensara-warm-400 mt-2 text-center">
           ⚠️ Prototype only. Not for clinical use. All data is mock/demo data.
         </p>
       </div>
@@ -147,7 +147,7 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
     <>
       <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
         {deduplicated.length === 0 && (
-          <p className="text-gray-500 text-sm text-center py-6">
+          <p className="text-sensara-warm-500 text-sm text-center py-6">
             No events yet — monitoring active
           </p>
         )}
@@ -160,10 +160,10 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
             <div
               key={event._id}
               className={`rounded-lg border transition-all duration-200 animate-fade-in
-                ${event.severity === "urgent" ? "border-red-800/60 bg-red-950/20" :
-                  event.severity === "assist" ? "border-orange-800/60 bg-orange-950/20" :
-                  event.severity === "watch" ? "border-yellow-800/60 bg-yellow-950/20" :
-                  "border-gray-700/50 bg-gray-800/40"}`}
+                ${event.severity === "urgent" ? "border-red-300 bg-red-50" :
+                  event.severity === "assist" ? "border-orange-300 bg-orange-50" :
+                  event.severity === "watch" ? "border-yellow-300 bg-yellow-50" :
+                  "border-sensara-divider bg-sensara-warm-100/60"}`}
             >
               {/* Event summary row */}
               <button
@@ -174,49 +174,49 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <SafetyBadge severity={event.severity} size="sm" />
-                    <span className="text-white text-sm font-medium">
+                    <span className="text-sensara-forest-900 text-sm font-medium">
                       {EVENT_LABELS[event.eventType] ?? event.eventType}
                     </span>
                     {event.acknowledged && (
-                      <span className="text-[10px] bg-green-900/50 text-green-400 border border-green-800 rounded-full px-1.5 py-0.5">
+                      <span className="text-[10px] bg-green-100 text-green-700 border border-green-300 rounded-full px-1.5 py-0.5">
                         ✓ Acknowledged
                       </span>
                     )}
                     {event.source === "audio_monitor" && (
-                      <span className="text-[10px] bg-purple-900/50 text-purple-300 border border-purple-800 rounded-full px-1.5 py-0.5">
+                      <span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-300 rounded-full px-1.5 py-0.5">
                         🎙️ Audio
                       </span>
                     )}
                     {event.hasVideoClip && (
-                      <span className="text-[10px] bg-blue-900/50 text-blue-300 border border-blue-800 rounded-full px-1.5 py-0.5">
+                      <span className="text-[10px] bg-sensara-forest-100 text-sensara-forest-700 border border-sensara-forest-200 rounded-full px-1.5 py-0.5">
                         📹 Video Clip
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-400 text-xs mt-0.5 truncate">{event.reason}</p>
+                  <p className="text-sensara-warm-700 text-xs mt-0.5 truncate">{event.reason}</p>
                 </div>
-                <div className="text-right shrink-0 text-[10px] text-gray-500">
+                <div className="text-right shrink-0 text-[10px] text-sensara-warm-600">
                   <div>{formatTimestamp(event.createdAt)}</div>
-                  <div className="text-gray-600">{formatRelative(event.createdAt)}</div>
+                  <div className="text-sensara-warm-400">{formatRelative(event.createdAt)}</div>
                 </div>
               </button>
 
               {/* Expanded detail */}
               {isExpanded && (
-                <div className="px-3 pb-3 border-t border-gray-700/50 pt-2 space-y-2 animate-fade-in">
-                  <p className="text-gray-300 text-xs">{event.reason}</p>
+                <div className="px-3 pb-3 border-t border-sensara-divider pt-2 space-y-2 animate-fade-in">
+                  <p className="text-sensara-forest-800 text-xs">{event.reason}</p>
 
                   {event.audioTranscript && (
-                    <div className="bg-purple-950/30 border border-purple-900/40 rounded-lg px-2.5 py-1.5">
-                      <p className="text-[9px] text-purple-400 mb-0.5">Transcript</p>
-                      <p className="text-xs text-purple-200 italic">"{event.audioTranscript}"</p>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg px-2.5 py-1.5">
+                      <p className="text-[9px] text-purple-600 mb-0.5">Transcript</p>
+                      <p className="text-xs text-purple-800 italic">"{event.audioTranscript}"</p>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-gray-400">
-                    <span>Confidence: <b className="text-white">{Math.round(event.confidence * 100)}%</b></span>
-                    <span>Posture: <b className="text-white">{Math.round(event.signals.postureAngle)}°</b></span>
-                    <span>Still: <b className="text-white">{Math.round(event.signals.secondsStill)}s</b></span>
+                  <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-sensara-warm-600">
+                    <span>Confidence: <b className="text-sensara-forest-900">{Math.round(event.confidence * 100)}%</b></span>
+                    <span>Posture: <b className="text-sensara-forest-900">{Math.round(event.signals.postureAngle)}°</b></span>
+                    <span>Still: <b className="text-sensara-forest-900">{Math.round(event.signals.secondsStill)}s</b></span>
                   </div>
 
                   {/* View Clip button */}
@@ -228,7 +228,7 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
                           label: EVENT_LABELS[event.eventType] ?? event.eventType,
                         })
                       }
-                      className="w-full text-xs bg-blue-900/50 hover:bg-blue-800/60 text-blue-200 border border-blue-800/60 rounded-lg py-1.5 transition-colors"
+                      className="w-full text-xs bg-sensara-forest-700 hover:bg-sensara-forest-600 text-white border border-sensara-forest-500 rounded-lg py-1.5 transition-colors"
                     >
                       📹 View Clip
                     </button>
@@ -238,7 +238,7 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
                   {isNonStable && !event.acknowledged && event._id && (
                     <button
                       onClick={() => onAcknowledge(event._id!)}
-                      className="w-full text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg py-1.5 transition-colors"
+                      className="w-full text-xs bg-sensara-warm-100 hover:bg-sensara-warm-200 text-sensara-forest-800 border border-sensara-border rounded-lg py-1.5 transition-colors"
                     >
                       ✓ Acknowledge Alert
                     </button>
@@ -254,7 +254,7 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
                           setNoteText((prev) => ({ ...prev, [event._id!]: e.target.value }))
                         }
                         placeholder="Add caregiver note…"
-                        className="flex-1 text-xs bg-gray-700 text-white rounded-lg px-2 py-1.5 border border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="flex-1 text-xs bg-white text-sensara-forest-900 rounded-lg px-2 py-1.5 border border-sensara-border focus:outline-none focus:ring-1 focus:ring-sensara-forest-500"
                       />
                       <button
                         onClick={() => {
@@ -264,7 +264,7 @@ export default function EventTimeline({ events, onAcknowledge, onAddNote }: Even
                             setNoteText((prev) => ({ ...prev, [event._id!]: "" }));
                           }
                         }}
-                        className="text-xs bg-blue-700 hover:bg-blue-600 text-white rounded-lg px-2.5 py-1.5 transition-colors"
+                        className="text-xs bg-sensara-forest-700 hover:bg-sensara-forest-600 text-white rounded-lg px-2.5 py-1.5 transition-colors"
                       >
                         Save
                       </button>
