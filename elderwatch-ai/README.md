@@ -128,6 +128,7 @@ Full real-time webcam demo with all existing functionality preserved:
 | Visual-only choking detection (sustained 4s hands-near-throat, no audio required) | ✅ MVP |
 | Pause Monitoring (stops all detection, classification, and S3 uploads) | ✅ MVP |
 | Twilio SMS alerts on urgent events (2-min per-resident cooldown) | ✅ MVP |
+| Resend email alerts on urgent events (2-min per-resident cooldown, HTML email) | ✅ MVP |
 
 ---
 
@@ -277,6 +278,11 @@ TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
 CAREGIVER_PHONE_NUMBER=+1xxxxxxxxxx
+
+# Resend email alerts for urgent events (optional — alerts skipped if absent)
+RESEND_API_KEY=re_...
+CAREGIVER_EMAIL=caregiver@example.com
+ALERT_FROM_EMAIL=ElderWatch AI <onboarding@resend.dev>
 ```
 
 ### 3. Run
@@ -552,6 +558,43 @@ Each event type has an independent cooldown that limits how often it can be pers
 
 ---
 
+## Email Alerts (Resend)
+
+When an urgent safety event is created, ElderWatch AI sends an email alert to the configured
+caregiver address using [Resend](https://resend.com).
+
+### What triggers an email
+
+Only events with `severity === "urgent"` trigger an email:
+- Possible fall
+- Possible choking
+- Audio distress
+- Seizure-like motion
+- Any manually-triggered critical event
+
+Stable, Watch, and Assist events do **not** send email.
+
+A **2-minute per-resident per-event-type cooldown** prevents alert spam during sustained events.
+
+### Setup
+
+1. Sign up at [resend.com](https://resend.com) and create an API key.
+2. Add to `.env.local`:
+   ```env
+   RESEND_API_KEY=re_...
+   CAREGIVER_EMAIL=caregiver@example.com
+   ALERT_FROM_EMAIL=ElderWatch AI <onboarding@resend.dev>
+   ```
+   > During development, Resend's `onboarding@resend.dev` sender works without domain verification.
+   > For production, verify your own domain in the Resend dashboard.
+3. Restart `npm run dev`.
+4. The **📧 Email Alerts Ready** badge appears in the Live Camera controls bar.
+5. Click **📧 Test Email** to send a test message to `CAREGIVER_EMAIL`.
+
+If the env vars are missing, the badge shows **Email Not Configured** and emails are silently skipped — event creation, MongoDB, S3, and the UI are unaffected.
+
+---
+
 ## Audio Monitoring (ElevenLabs)
 
 The **Audio Monitor** card uses the browser microphone to continuously capture audio in 6-second
@@ -589,6 +632,7 @@ elderwatch-ai/
 │   │       ├── seed/route.ts
 │   │       ├── assistant/route.ts    # AI care guidance
 │   │       ├── audio/analyze/route.ts  # ElevenLabs STT + distress classification
+│   │       ├── email-alerts/test/route.ts  # POST: test email via Resend
 │   │       ├── video-clips/route.ts
 │   │       ├── video-clips/presign-upload/route.ts
 │   │       └── video-clips/[id]/playback-url/route.ts
@@ -612,6 +656,7 @@ elderwatch-ai/
 │       ├── elevenlabs.ts             # ElevenLabs STT + audio distress keyword classifier
 │       ├── mockData.ts               # MOCK DATA ONLY — not real patients
 │       ├── mongodb.ts                # MongoDB connection helper
+│       ├── emailAlerts.ts          # Resend email alert integration (server-only)
 │       └── db/
 │           ├── residents.ts
 │           ├── events.ts
@@ -643,6 +688,7 @@ elderwatch-ai/
 - [x] Experimental seizure-like movement detection (conservative 6s threshold, toggle)
 - [x] Pause Monitoring — suspends all classification, audio analysis, and S3 recording
 - [x] Per-event-type debounce cooldowns for MongoDB and S3
+- [x] Resend email alerts on urgent events (HTML email, 2-min cooldown)
 
 ### Future Work
 

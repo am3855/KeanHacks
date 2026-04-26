@@ -55,6 +55,8 @@ export default function Dashboard() {
   const [s3Configured, setS3Configured] = useState(false);
   const [elevenLabsConfigured, setElevenLabsConfigured] = useState(false);
   const [smsConfigured, setSmsConfigured] = useState(false);
+  const [emailConfigured, setEmailConfigured] = useState(false);
+  const [emailTestStatus, setEmailTestStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [isPaused, setIsPaused] = useState(false);
   const [seizureDetectionEnabled, setSeizureDetectionEnabled] = useState(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
@@ -99,6 +101,18 @@ export default function Dashboard() {
     isPaused
   );
 
+  // ── Test email alert ──────────────────────────────────────────────────────
+  const handleSendTestEmail = useCallback(async () => {
+    setEmailTestStatus("sending");
+    try {
+      const res = await fetch("/api/email-alerts/test", { method: "POST" });
+      setEmailTestStatus(res.ok ? "sent" : "error");
+    } catch {
+      setEmailTestStatus("error");
+    }
+    setTimeout(() => setEmailTestStatus("idle"), 4000);
+  }, []);
+
   // ── Demo triggers ─────────────────────────────────────────────────────────
   const handleTriggerDemo = useCallback(() => {
     injectDemoEvent("possible_fall", "urgent");
@@ -129,8 +143,14 @@ export default function Dashboard() {
 
     fetch("/api/status")
       .then((r) => r.json())
-      .then((d) => setSmsConfigured(d.smsConfigured === true))
-      .catch(() => setSmsConfigured(false));
+      .then((d) => {
+        setSmsConfigured(d.smsConfigured === true);
+        setEmailConfigured(d.emailConfigured === true);
+      })
+      .catch(() => {
+        setSmsConfigured(false);
+        setEmailConfigured(false);
+      });
   }, []);
 
   // ── Acknowledge event ─────────────────────────────────────────────────────
@@ -282,6 +302,7 @@ export default function Dashboard() {
                 label={isPaused ? "Paused" : poseStatus === "running" ? "Camera Live" : "Camera " + poseStatus}
                 color={isPaused ? "yellow" : poseStatus === "running" ? "green" : poseStatus === "loading" ? "yellow" : "red"}
               />
+              <EmailStatusBadge configured={emailConfigured} testStatus={emailTestStatus} />
               <button
                 onClick={handleTriggerDemo}
                 disabled={poseStatus !== "running" || isPaused}
@@ -289,6 +310,15 @@ export default function Dashboard() {
               >
                 ⚡ Trigger Critical Event
               </button>
+              {emailConfigured && (
+                <button
+                  onClick={handleSendTestEmail}
+                  disabled={emailTestStatus === "sending"}
+                  className="text-xs bg-blue-700/80 hover:bg-blue-600/90 disabled:opacity-60 text-white border border-blue-600 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  {emailTestStatus === "sending" ? "Sending…" : emailTestStatus === "sent" ? "✓ Sent" : emailTestStatus === "error" ? "✗ Failed" : "📧 Test Email"}
+                </button>
+              )}
             </div>
 
             {/* Two-column live camera layout */}
@@ -509,6 +539,26 @@ function StatusPill({
     <div className="flex items-center gap-1.5 bg-sensara-forest-900/80 rounded-full px-2.5 py-1 border border-sensara-forest-700">
       <div className={`w-1.5 h-1.5 rounded-full ${dotColor} ${active ? "animate-pulse" : ""}`} />
       <span className={`text-xs ${textColor}`}>{label}</span>
+    </div>
+  );
+}
+
+function EmailStatusBadge({
+  configured,
+  testStatus,
+}: {
+  configured: boolean;
+  testStatus: "idle" | "sending" | "sent" | "error";
+}) {
+  const isError = testStatus === "error";
+  const dot = isError ? "bg-red-400 animate-pulse" : configured ? "bg-green-400" : "bg-yellow-400";
+  const text = isError ? "text-red-300" : configured ? "text-green-300" : "text-yellow-300";
+  const label = isError ? "Email Error" : configured ? "Email Alerts Ready" : "Email Not Configured";
+
+  return (
+    <div className="flex items-center gap-1.5 bg-sensara-forest-900/80 rounded-full px-2.5 py-1 border border-sensara-forest-700">
+      <div className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+      <span className={`text-xs ${text}`}>📧 {label}</span>
     </div>
   );
 }

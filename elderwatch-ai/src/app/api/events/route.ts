@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRecentEvents, createSafetyEvent } from "@/lib/db/events";
 import { RECOMMENDED_ACTIONS } from "@/lib/classifySafety";
 import { sendUrgentSmsAlert } from "@/lib/sms";
+import { sendUrgentEmailAlert } from "@/lib/emailAlerts";
 import type { SafetyEvent } from "@/lib/types";
 
 export async function GET(req: Request) {
@@ -50,9 +51,10 @@ export async function POST(req: Request) {
 
     const created = await createSafetyEvent(event);
 
-    // Fire-and-forget SMS — failure must not affect the response
+    // Fire-and-forget alerts — failure must not affect the response
     if (created.severity === "urgent") {
       sendUrgentSmsAlert(created as SafetyEvent).catch(() => {});
+      sendUrgentEmailAlert(created as SafetyEvent).catch(() => {});
     }
 
     return NextResponse.json(created, { status: 201 });

@@ -113,22 +113,6 @@ export default function MultiFeedDemo() {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Description banner */}
-      <div className="bg-white border border-sensara-border rounded-xl px-4 py-3 flex items-start gap-3 shadow-sm">
-        <div className="w-8 h-8 bg-sensara-forest-800 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-white font-bold text-xs">
-          4×
-        </div>
-        <div>
-          <h2 className="text-sensara-forest-900 font-semibold text-sm">Multi-Room Command Center</h2>
-          <p className="text-sensara-warm-700 text-xs mt-1 leading-relaxed">
-            Simulated four-camera care-home command center using prerecorded video feeds. Designed to
-            demonstrate how Sensara scales to multiple residents and rooms. Events are{" "}
-            <span className="text-yellow-700 font-medium">not automatically saved to MongoDB or uploaded to S3</span> —
-            use the Save buttons to persist selected alerts.
-          </p>
-        </div>
-      </div>
-
       {/* Main layout: 2×2 grid + alert panel */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5 items-start">
         {/* 2×2 video grid */}

@@ -6,6 +6,7 @@ import {
   type AudioClassification,
 } from "@/lib/elevenlabs";
 import { createSafetyEvent } from "@/lib/db/events";
+import { sendUrgentEmailAlert } from "@/lib/emailAlerts";
 import type { SafetyEvent } from "@/lib/types";
 
 // GET — lightweight ElevenLabs status check
@@ -97,6 +98,10 @@ export async function POST(req: Request) {
       };
       const saved = await createSafetyEvent(event);
       eventId = saved._id;
+
+      if (saved.severity === "urgent") {
+        sendUrgentEmailAlert(saved as SafetyEvent).catch(() => {});
+      }
     }
 
     // Only trigger clip recording for urgent events to avoid S3 spam
