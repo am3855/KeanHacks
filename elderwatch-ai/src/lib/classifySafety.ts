@@ -49,8 +49,8 @@ export function classifyResidentSafety(
     };
   }
 
-  // 3. Fall risk — lying down with some movement (possibly getting up)
-  if (signals.isLyingDown && signals.movementScore >= 0.1) {
+  // 3. Fall risk — lying down with some movement for 2+ continuous seconds
+  if (signals.isLyingDown && signals.movementScore >= 0.1 && (signals.secondsLyingDown ?? 0) >= 2) {
     return {
       severity: ResidentStatus.ASSIST,
       eventType: EventType.FALL_RISK,
@@ -119,8 +119,8 @@ export function classifyResidentSafety(
     };
   }
 
-  // 8. Unsafe posture — torso heavily tilted
-  if (signals.postureAngle > 60) {
+  // 8. Unsafe posture — torso heavily tilted for 3+ continuous seconds
+  if (signals.postureAngle > 60 && (signals.secondsBadPosture ?? 0) >= 3) {
     return {
       severity: ResidentStatus.ASSIST,
       eventType: EventType.UNSAFE_POSTURE,
@@ -129,8 +129,8 @@ export function classifyResidentSafety(
     };
   }
 
-  // 9. Early warning — mild lean
-  if (signals.postureAngle > 35) {
+  // 9. Early warning — mild lean for 3+ continuous seconds
+  if (signals.postureAngle > 35 && (signals.secondsBadPosture ?? 0) >= 3) {
     return {
       severity: ResidentStatus.WATCH,
       eventType: EventType.UNSAFE_POSTURE,

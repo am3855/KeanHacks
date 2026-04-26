@@ -45,8 +45,8 @@ export const DETECTION_THRESHOLDS = {
   chokingHandDurationSeconds: 2,
   chokingCooldownMs: 120_000,
 
-  // Safe zone: expand inward tolerance so transient boundary touches don't trigger
-  safeZoneMargin: 0.05,
+  // Safe zone: 0 margin so the visual lines match the detection boundary exactly
+  safeZoneMargin: 0,
 
   // Video clip: only record on urgent, 2-minute cooldown per resident
   criticalClipCooldownMs: 120_000,
@@ -190,7 +190,12 @@ export function getBodyCenter(landmarks: PoseLandmark[]): { x: number; y: number
   const lHip = landmarks[LM.LEFT_HIP];
   const rHip = landmarks[LM.RIGHT_HIP];
 
-  const available = [lShoulder, rShoulder, lHip, rHip].filter(Boolean) as PoseLandmark[];
+  // Only use landmarks with sufficient confidence — MediaPipe still provides
+  // extrapolated coordinates for occluded/off-screen landmarks (visibility ~0),
+  // which can place the body center far outside the frame and falsely trigger wandering.
+  const available = [lShoulder, rShoulder, lHip, rHip].filter(
+    (lm): lm is PoseLandmark => !!lm && (lm.visibility === undefined || lm.visibility > 0.3)
+  );
   if (available.length < 2) return null;
 
   const x = available.reduce((s, lm) => s + lm.x, 0) / available.length;
@@ -294,22 +299,20 @@ export function isPoseVisible(landmarks: PoseLandmark[]): boolean {
   return count >= 2;
 }
 
-// ─── Clamp a safe zone so all values are valid ────────────────────────────────
-// x+width ≤ 1, y+height ≤ 1, width/height ≥ 0.1
+// ─── Clamp a safe zone — horizontal boundaries only, always spans full height ──
+// y is always 0, height is always 1. Only x and width are adjustable.
 export function clampSafeZone(z: SafeZone): SafeZone {
-  const x = Math.max(0, Math.min(0.9, z.x));
-  const y = Math.max(0, Math.min(0.9, z.y));
+  const x = Math.max(0, Math.min(0.85, z.x));
   const width = Math.max(0.1, Math.min(1 - x, z.width));
-  const height = Math.max(0.1, Math.min(1 - y, z.height));
-  return { x, y, width, height };
+  return { x, y: 0, width, height: 1 };
 }
 
-// ─── Default safe zone: almost full frame (4% left/right, 2% top/bottom) ─────
+// ─── Default safe zone: full height, 10% margin each side ────────────────────
 export const DEFAULT_SAFE_ZONE: SafeZone = {
-  x: 0.04,
-  y: 0.02,
-  width: 0.92,
-  height: 0.96,
+  x: 0.1,
+  y: 0,
+  width: 0.8,
+  height: 1,
 };
 
 // ─── MediaPipe skeleton connections ───────────────────────────────────────────

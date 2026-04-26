@@ -55,6 +55,8 @@ export interface SafetySignals {
   secondsOutsideSafeZone?: number;   // continuous seconds torso center has been outside safe zone
   secondsHighMovement?: number;      // continuous seconds of sustained high movement (seizure detection)
   handsNearThroatSeconds?: number;   // continuous seconds with hands near throat area (choking)
+  secondsLyingDown?: number;         // continuous seconds the resident has been detected lying down
+  secondsBadPosture?: number;        // continuous seconds postureAngle has exceeded the watch threshold
   majorBodyMovementScore?: number;   // movement score using only torso/head landmarks (excl. wrists)
   leftHandNearThroat?: boolean;      // left wrist/index within throat proximity this frame
   rightHandNearThroat?: boolean;     // right wrist/index within throat proximity this frame

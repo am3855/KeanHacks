@@ -61,9 +61,13 @@ export function useResidentMonitor(
   const outsideSafeZoneSinceRef = useRef<number | null>(null);
   const highMovementSinceRef = useRef<number | null>(null);
   const handsNearThroatSinceRef = useRef<number | null>(null);
+  const lyingDownSinceRef = useRef<number | null>(null);
+  const badPostureSinceRef = useRef<number | null>(null);
 
   // Per-event-type last-persisted timestamps (replaces global EVENT_DEBOUNCE_MS)
   const lastPersistedRef = useRef<Record<string, number>>({});
+  // Latch: once possible_fall fires, hold it until the person is clearly upright
+  const possibleFallLatchedRef = useRef(false);
 
   const [state, setState] = useState<MonitorState>(() => ({
     signals: {
@@ -121,6 +125,8 @@ export function useResidentMonitor(
     let leftHandNearThroat = false;
     let rightHandNearThroat = false;
     let bothHandsNearThroat = false;
+    let secondsLyingDown = 0;
+    let secondsBadPosture = 0;
 
     if (visible && landmarks) {
       postureAngle = calculatePostureAngle(landmarks);
@@ -175,6 +181,24 @@ export function useResidentMonitor(
         handsNearThroatSeconds = 0;
       }
 
+      // Track lying-down duration
+      if (isLyingDown) {
+        if (lyingDownSinceRef.current === null) lyingDownSinceRef.current = now;
+        secondsLyingDown = (now - lyingDownSinceRef.current) / 1000;
+      } else {
+        lyingDownSinceRef.current = null;
+        secondsLyingDown = 0;
+      }
+
+      // Track bad-posture duration (angle > 30 covers both the watch and assist thresholds)
+      if (postureAngle > 30) {
+        if (badPostureSinceRef.current === null) badPostureSinceRef.current = now;
+        secondsBadPosture = (now - badPostureSinceRef.current) / 1000;
+      } else {
+        badPostureSinceRef.current = null;
+        secondsBadPosture = 0;
+      }
+
       prevLandmarksRef.current = landmarks;
     } else if (stillSinceRef.current !== null) {
       // Not visible — maintain stillness counter
@@ -191,15 +215,36 @@ export function useResidentMonitor(
       secondsOutsideSafeZone,
       secondsHighMovement,
       handsNearThroatSeconds,
+      secondsLyingDown,
+      secondsBadPosture,
       majorBodyMovementScore,
       leftHandNearThroat,
       rightHandNearThroat,
       bothHandsNearThroat,
     };
 
-    const classification = classifyResidentSafety(signals, {
+    let classification = classifyResidentSafety(signals, {
       seizureDetectionEnabled: seizureEnabledRef.current,
     });
+
+    // Latch possible_fall — once the resident is detected lying still, keep the
+    // urgent classification until they're clearly upright again. Without this,
+    // small movements (breathing, shifting) reset secondsStill and the alert
+    // oscillates, spamming the timeline and TTS on every 10-second cycle.
+    if (classification.eventType === "possible_fall") {
+      possibleFallLatchedRef.current = true;
+    }
+    if (!signals.isLyingDown) {
+      possibleFallLatchedRef.current = false;
+    }
+    if (possibleFallLatchedRef.current && signals.isLyingDown && classification.eventType !== "possible_fall") {
+      classification = {
+        severity: "urgent",
+        eventType: "possible_fall",
+        reason: "Resident appears to be lying down with minimal movement — caregiver should check",
+        confidence: 0.9,
+      };
+    }
 
     // ── Persist meaningful events with per-event-type cooldowns ─────────────
     if (classification.severity !== "stable") {
@@ -326,8 +371,8 @@ function persistEvent(
   signals: SafetySignals
 ) {
   // Strip the runtime-only timing/debug fields before persisting
-  const { secondsOutsideSafeZone, secondsHighMovement, handsNearThroatSeconds, majorBodyMovementScore, leftHandNearThroat, rightHandNearThroat, bothHandsNearThroat, ...coreSignals } = signals;
-  void secondsOutsideSafeZone; void secondsHighMovement; void handsNearThroatSeconds; void majorBodyMovementScore;
+  const { secondsOutsideSafeZone, secondsHighMovement, handsNearThroatSeconds, secondsLyingDown, secondsBadPosture, majorBodyMovementScore, leftHandNearThroat, rightHandNearThroat, bothHandsNearThroat, ...coreSignals } = signals;
+  void secondsOutsideSafeZone; void secondsHighMovement; void handsNearThroatSeconds; void secondsLyingDown; void secondsBadPosture; void majorBodyMovementScore;
   void leftHandNearThroat; void rightHandNearThroat; void bothHandsNearThroat;
 
   fetch("/api/events", {

@@ -30,11 +30,13 @@ interface PoseCameraProps {
   insideSafeZone?: boolean;
 }
 
-type DragHandle = "tl" | "tr" | "bl" | "br" | "move";
+// "left"/"right" refer to display-left and display-right (the mirrored view).
+// Because the video is horizontally flipped, display-left = raw right edge of the zone.
+type DragHandle = "left" | "right" | "move";
 
 interface DragState {
   handle: DragHandle;
-  startNX: number;  // pointer position in normalized canvas coords at drag start
+  startNX: number;  // pointer x in normalized display coords at drag start
   startNY: number;
   startZone: SafeZone;
 }
@@ -51,8 +53,7 @@ const JOINT_COLOR = "#93c5fd";    // blue-300
 const SAFE_ZONE_COLOR = "rgba(34, 197, 94, 0.25)";
 const SAFE_ZONE_BORDER = "#22c55e";
 const SAFE_ZONE_EDIT_BORDER = "#86efac"; // brighter green in edit mode
-const HANDLE_SIZE = 12;   // pixels (in canvas space)
-const HANDLE_HIT_NORM = 0.035; // normalized hit-test radius for corner handles
+const HANDLE_HIT_NORM = 0.045; // normalized hit-test radius for edge handles
 
 export default function PoseCamera({
   videoRef,
@@ -89,53 +90,52 @@ export default function PoseCamera({
     };
   }, [canvasRef]);
 
-  // ── Pointer down: hit-test handles then box interior ─────────────────────────
+  // ── Pointer down: hit-test left/right edge handles then interior ──────────────
+  // nx is in display (mirrored) coordinates: 0=left edge of canvas, 1=right.
+  // Display-left edge = 1 - (sz.x + sz.width), display-right edge = 1 - sz.x.
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!editMode || !onSafeZoneChange) return;
     e.preventDefault();
     const { nx, ny } = toNormalized(e.clientX, e.clientY);
     const z = safeZoneRef.current;
 
-    // Corner hit-test (normalized distance check)
-    const corners: { id: DragHandle; cx: number; cy: number }[] = [
-      { id: "tl", cx: z.x,            cy: z.y },
-      { id: "tr", cx: z.x + z.width,  cy: z.y },
-      { id: "bl", cx: z.x,            cy: z.y + z.height },
-      { id: "br", cx: z.x + z.width,  cy: z.y + z.height },
-    ];
+    const displayLeft  = 1 - z.x - z.width;
+    const displayRight = 1 - z.x;
 
-    for (const corner of corners) {
-      if (Math.abs(nx - corner.cx) < HANDLE_HIT_NORM && Math.abs(ny - corner.cy) < HANDLE_HIT_NORM) {
-        dragRef.current = { handle: corner.id, startNX: nx, startNY: ny, startZone: { ...z } };
-        (e.target as Element).setPointerCapture(e.pointerId);
-        return;
-      }
+    if (Math.abs(nx - displayLeft) < HANDLE_HIT_NORM) {
+      dragRef.current = { handle: "left", startNX: nx, startNY: ny, startZone: { ...z } };
+      (e.target as Element).setPointerCapture(e.pointerId);
+      return;
     }
-
-    // Interior of box → move
-    if (nx >= z.x && nx <= z.x + z.width && ny >= z.y && ny <= z.y + z.height) {
+    if (Math.abs(nx - displayRight) < HANDLE_HIT_NORM) {
+      dragRef.current = { handle: "right", startNX: nx, startNY: ny, startZone: { ...z } };
+      (e.target as Element).setPointerCapture(e.pointerId);
+      return;
+    }
+    if (nx > displayLeft && nx < displayRight) {
       dragRef.current = { handle: "move", startNX: nx, startNY: ny, startZone: { ...z } };
       (e.target as Element).setPointerCapture(e.pointerId);
     }
   }, [editMode, onSafeZoneChange, toNormalized]);
 
   // ── Pointer move: update safe zone while dragging ─────────────────────────────
+  // dx is in display coordinates. Because the video is mirrored:
+  //   display-left  edge = 1 - (sz.x + sz.width)  → dragging right shrinks width
+  //   display-right edge = 1 - sz.x               → dragging right decreases sz.x (zone shifts left in raw)
+  //   move                                         → dragging right shifts zone left in raw (sz.x decreases)
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const drag = dragRef.current;
     if (!drag || !onSafeZoneChange) return;
 
-    const { nx, ny } = toNormalized(e.clientX, e.clientY);
-    const dx = nx - drag.startNX;
-    const dy = ny - drag.startNY;
+    const { nx } = toNormalized(e.clientX, e.clientY);
+    const dx = nx - drag.startNX;  // positive = moved right in display
     const s = drag.startZone;
     let z = { ...s };
 
     switch (drag.handle) {
-      case "move": z.x = s.x + dx; z.y = s.y + dy; break;
-      case "tl":   z.x = s.x + dx; z.y = s.y + dy; z.width = s.width - dx; z.height = s.height - dy; break;
-      case "tr":                    z.y = s.y + dy; z.width = s.width + dx; z.height = s.height - dy; break;
-      case "bl":   z.x = s.x + dx;                  z.width = s.width - dx; z.height = s.height + dy; break;
-      case "br":                                     z.width = s.width + dx; z.height = s.height + dy; break;
+      case "left":  z.width = s.width - dx; break;                          // display-left = raw right boundary
+      case "right": z.x = s.x - dx; z.width = s.width + dx; break;         // display-right = raw left boundary
+      case "move":  z.x = s.x - dx; break;                                  // shift whole zone
     }
 
     onSafeZoneChange(clampSafeZone(z));
@@ -180,51 +180,50 @@ export default function PoseCamera({
       ctx.drawImage(video, 0, 0, W, H);
       ctx.restore();
 
-      // 2. Draw safe zone rectangle
-      const szX = sz.x * W;
-      const szY = sz.y * H;
-      const szW = sz.width * W;
-      const szH = sz.height * H;
+      // 2. Draw safe zone — two vertical lines spanning full height.
+      // The zone is stored in raw landmark coords but the video is mirrored, so we
+      // flip x: display-left = 1 - (sz.x + sz.width), display-right = 1 - sz.x.
+      const dLeft  = (1 - sz.x - sz.width) * W;
+      const dRight = (1 - sz.x) * W;
 
-      ctx.fillStyle = inEdit
-        ? "rgba(34, 197, 94, 0.12)"
-        : SAFE_ZONE_COLOR;
-      ctx.fillRect(szX, szY, szW, szH);
+      // Semi-transparent fill between the lines
+      ctx.fillStyle = inEdit ? "rgba(34, 197, 94, 0.08)" : SAFE_ZONE_COLOR;
+      ctx.fillRect(dLeft, 0, dRight - dLeft, H);
 
+      // Vertical boundary lines
       ctx.strokeStyle = inEdit ? SAFE_ZONE_EDIT_BORDER : SAFE_ZONE_BORDER;
       ctx.lineWidth = inEdit ? 2.5 : 2;
       ctx.setLineDash([8, 4]);
-      ctx.strokeRect(szX, szY, szW, szH);
+      ctx.beginPath(); ctx.moveTo(dLeft,  0); ctx.lineTo(dLeft,  H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(dRight, 0); ctx.lineTo(dRight, H); ctx.stroke();
       ctx.setLineDash([]);
 
-      // Safe zone label
-      ctx.fillStyle = inEdit ? SAFE_ZONE_EDIT_BORDER : SAFE_ZONE_BORDER;
+      // Label at top-centre of zone
       ctx.font = "bold 11px monospace";
+      const midX = (dLeft + dRight) / 2;
       if (inEdit) {
-        ctx.fillText("SAFE ZONE — drag corners or box to adjust", szX + 6, szY + 14);
+        ctx.fillStyle = SAFE_ZONE_EDIT_BORDER;
+        ctx.fillText("← drag edges →", midX - 48, 16);
       } else if (!inZone) {
         ctx.fillStyle = "rgba(234, 179, 8, 0.9)";
-        ctx.fillText("Outside zone…", szX + 6, szY + 14);
+        ctx.fillText("Outside zone…", dLeft + 6, 16);
       } else {
-        ctx.fillText("SAFE ZONE", szX + 6, szY + 14);
+        ctx.fillStyle = SAFE_ZONE_BORDER;
+        ctx.fillText("SAFE ZONE", midX - 30, 16);
       }
 
-      // 3. Draw corner handles in edit mode
+      // 3. Draw side-edge handles in edit mode
       if (inEdit) {
-        const corners = [
-          { cx: sz.x * W,              cy: sz.y * H,              cursor: "nw" },
-          { cx: (sz.x + sz.width) * W, cy: sz.y * H,              cursor: "ne" },
-          { cx: sz.x * W,              cy: (sz.y + sz.height) * H, cursor: "sw" },
-          { cx: (sz.x + sz.width) * W, cy: (sz.y + sz.height) * H, cursor: "se" },
-        ];
-        const half = HANDLE_SIZE / 2;
+        const HW = 10;   // handle width px
+        const HH = 52;   // handle height px
+        const midY = H / 2;
         ctx.setLineDash([]);
-        for (const h of corners) {
-          ctx.fillStyle = "white";
-          ctx.fillRect(h.cx - half, h.cy - half, HANDLE_SIZE, HANDLE_SIZE);
+        for (const ex of [dLeft, dRight]) {
+          ctx.fillStyle = "rgba(255,255,255,0.92)";
+          ctx.fillRect(ex - HW / 2, midY - HH / 2, HW, HH);
           ctx.strokeStyle = SAFE_ZONE_EDIT_BORDER;
           ctx.lineWidth = 2;
-          ctx.strokeRect(h.cx - half, h.cy - half, HANDLE_SIZE, HANDLE_SIZE);
+          ctx.strokeRect(ex - HW / 2, midY - HH / 2, HW, HH);
         }
       }
 
