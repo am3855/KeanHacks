@@ -1,4 +1,4 @@
-# Sensara — AI-Powered Elder Care Monitoring
+# Sensara — AI-Powered Elder Care Monitoring - This won our team 1st place at KeanUHacks and Best Use of Eleven Labs AI
 Real-time visual and audio safety monitoring for elderly care homes.
 
 ## The Problem
